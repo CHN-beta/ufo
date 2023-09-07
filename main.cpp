@@ -153,6 +153,11 @@ int main(int argc, const char** argv)
             basis[i_of_unfolded_qpoint][i_of_basis_in_primary_cell].transpose()
             * input.QPointData[i_of_folded_qpoint].ModeData[i_of_mode].AtomMovement
           ).array().abs2().sum());
+
+      // 归一化
+      auto sum = std::accumulate(coefficient_at_mode.begin(), coefficient_at_mode.end(), 0.);
+      for (auto& coefficient : coefficient_at_mode)
+        coefficient /= sum;
     }
   }
 
