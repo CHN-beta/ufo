@@ -1,2 +1,5 @@
 .vscode
 .direnv
+test/*.yaml
+main
+out.yaml
