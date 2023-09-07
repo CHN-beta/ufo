@@ -115,8 +115,8 @@ int main(int argc, const char** argv)
             {
               // 计算 q 点的坐标, 单位为相对于超胞的倒格矢
               auto qpoint_relative_to_super_cell =
-                Eigen::Vector3i({{i, j, k}})
-                + input.SuperCellMultiplier * Eigen::Vector3i({{x, y, z}});
+                Eigen::Vector3i({{i}, {j}, {k}})
+                + input.SuperCellMultiplier * Eigen::Vector3i({{x}, {y}, {z}});
               // 将 q 点坐标转换为埃^-1
               auto qpoint = (qpoint_relative_to_super_cell.transpose().cast<double>()
                 * (input.SuperCellMultiplier.cast<double>().inverse().transpose())).transpose();
@@ -173,7 +173,7 @@ int main(int argc, const char** argv)
           auto& unfolded_qpoint = output.QPointData.emplace_back();
           unfolded_qpoint.QPoint = input.SuperCellMultiplier.cast<double>().inverse() *
           (input.QPointData[i_of_folded_qpoint].QPoint
-              + Eigen::Vector3i({{x, y, z}}).cast<double>());
+              + Eigen::Vector3i({{x}, {y}, {z}}).cast<double>());
           for (int i_of_mode = 0; i_of_mode < input.QPointData[i_of_folded_qpoint].ModeData.size(); i_of_mode++)
           {
             auto& mode = unfolded_qpoint.ModeData.emplace_back();
