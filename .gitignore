@@ -1,5 +1,7 @@
 .vscode
 .direnv
 test/*.yaml
+test/*.dat
 main
+plot
 out.yaml
