@@ -5,7 +5,7 @@
   {
     devShell.x86_64-linux = pkgs.mkShell.override { stdenv = pkgs.gcc13Stdenv; }
     {
-      buildInputs = with pkgs; [ yaml-cpp eigen ];
+      buildInputs = with pkgs; [ yaml-cpp eigen fmt ];
       nativeBuildInputs = with pkgs; [ gdb ];
     };
   };

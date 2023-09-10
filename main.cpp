@@ -20,6 +20,7 @@ struct Input
   // 超胞在各个方向上是单胞的多少倍，这是一个对角矩阵
   Eigen::Matrix3i SuperCellMultiplier;
   // 在单胞内取几个平面波的基矢
+  // 在 debug 阶段, 先仅取一个
   Eigen::Vector3i PrimativeCellBasisNumber;
   // 超胞中原子的坐标，每行表示一个原子的坐标，单位为埃
   Eigen::MatrixX3d AtomPosition;
@@ -90,8 +91,9 @@ int main(int argc, const char** argv)
   Input input(argv[1]);
 
   // 反折叠的原理: 将超胞中的原子运动状态, 投影到一组平面波构成的基矢中.
-  // 每一个平面波的波矢由两部分相加得到: 一部分是单胞倒格子的整数倍, 要取得足够多, 取大约单胞中原子个数那么多个;
-  // 一部分是超胞倒格子的整数倍, 取 n 个, n 为超胞对应的单胞的倍数, 其实也就是倒空间中单胞对应倒格子中超胞的格点.
+  // 每一个平面波的波矢由两部分相加得到: 一部分是单胞倒格子的整数倍, 所取的个数有一定任意性, 论文中建议取大约单胞中原子个数那么多个;
+  //  对于没有缺陷的情况, 取一个应该就足够了.
+  // 另一部分是超胞倒格子的整数倍, 取 n 个, n 为超胞对应的单胞的倍数, 其实也就是倒空间中单胞对应倒格子中超胞的格点.
   // 只要第一部分取得足够多, 那么单胞中原子的状态就可以完全被这些平面波描述.
   // 将超胞中原子的运动状态投影到这些基矢上, 计算出投影的系数, 就可以将超胞的原子运动状态分解到单胞中的多个 q 点上.
 
@@ -163,7 +165,6 @@ int main(int argc, const char** argv)
 
   // 填充输出对象
   Output output;
-  output.QPointData.reserve(input.QPointData.size() * input.SuperCellMultiplier.determinant());
   for (int i_of_folded_qpoint = 0; i_of_folded_qpoint < input.QPointData.size(); i_of_folded_qpoint++)
     // for each unfolded q point corresponding to this folded q point
     for (int x = 0; x < input.SuperCellMultiplier(0, 0); x++)
@@ -175,13 +176,16 @@ int main(int argc, const char** argv)
           (input.QPointData[i_of_folded_qpoint].QPoint
               + Eigen::Vector3i({{x}, {y}, {z}}).cast<double>());
           for (int i_of_mode = 0; i_of_mode < input.QPointData[i_of_folded_qpoint].ModeData.size(); i_of_mode++)
-          {
-            auto& mode = unfolded_qpoint.ModeData.emplace_back();
-            mode.Frequency = input.QPointData[i_of_folded_qpoint].ModeData[i_of_mode].Frequency;
-            mode.Weight = projection_coefficient[i_of_folded_qpoint][i_of_mode]
+            if (projection_coefficient[i_of_folded_qpoint][i_of_mode]
               [x * input.SuperCellMultiplier(1, 1) * input.SuperCellMultiplier(2, 2)
-                + y * input.SuperCellMultiplier(2, 2) + z];
-          }
+                + y * input.SuperCellMultiplier(2, 2) + z] > 1e-3)
+            {
+              auto& mode = unfolded_qpoint.ModeData.emplace_back();
+              mode.Frequency = input.QPointData[i_of_folded_qpoint].ModeData[i_of_mode].Frequency;
+              mode.Weight = projection_coefficient[i_of_folded_qpoint][i_of_mode]
+                [x * input.SuperCellMultiplier(1, 1) * input.SuperCellMultiplier(2, 2)
+                  + y * input.SuperCellMultiplier(2, 2) + z];
+            }
         }
 
   output.write(argv[2]);
@@ -192,16 +196,21 @@ Input::Input(YAML::Node root)
   for (int i = 0; i < 3; i++)
     for (int j = 0; j < 3; j++)
       PrimativeCell(i, j) = root["lattice"][i][j].as<double>();
+
   SuperCellMultiplier.setZero();
   for (int i = 0; i < 3; i++)
     SuperCellMultiplier(i, i) = root["SuperCellMultiplier"][i].as<int>();
+
   for (int i = 0; i < 3; i++)
     PrimativeCellBasisNumber(i) = root["PrimativeCellBasisNumber"][i].as<int>();
+
   auto points = root["points"].as<std::vector<YAML::Node>>();
-  AtomPosition.resize(points.size(), 3);
+  auto atom_position_to_super_cell = Eigen::MatrixX3d(points.size(), 3);
   for (int i = 0; i < points.size(); i++)
     for (int j = 0; j < 3; j++)
-      AtomPosition(i, j) = points[i]["coordinates"][j].as<double>();
+      atom_position_to_super_cell(i, j) = points[i]["coordinates"][j].as<double>();
+  AtomPosition = atom_position_to_super_cell * (SuperCellMultiplier.cast<double>() * PrimativeCell);
+
   auto phonon = root["phonon"].as<std::vector<YAML::Node>>();
   QPointData.resize(phonon.size());
   for (int i = 0; i < phonon.size(); i++)
@@ -214,17 +223,32 @@ Input::Input(YAML::Node root)
     for (int j = 0; j < band.size(); j++)
     {
       QPointData[i].ModeData[j].Frequency = band[j]["frequency"].as<double>();
-      QPointData[i].ModeData[j].AtomMovement.resize(AtomPosition.rows(), 3);
-      auto eigenvector = band[j]["eigenvector"]
+      auto eigenvectors = Eigen::MatrixX3cd(AtomPosition.rows(), 3);
+      auto eigenvector_vectors = band[j]["eigenvector"]
         .as<std::vector<std::vector<std::vector<double>>>>();
       for (int k = 0; k < AtomPosition.rows(); k++)
         for (int l = 0; l < 3; l++)
-          QPointData[i].ModeData[j].AtomMovement(k, l) = eigenvector[k][l][0] + 1i * eigenvector[k][l][1];
-
+          eigenvectors(k, l)
+            = eigenvector_vectors[k][l][0] + 1i * eigenvector_vectors[k][l][1];
       // 需要对读入的原子运动状态作相位转换, 使得它们与我们的约定一致(对超胞周期性重复)
+      // QPointData[i].ModeData[j].AtomMovement
+      //   = eigenvectors.array().colwise() * (-2 * std::numbers::pi_v<double> * 1i
+      //       * (AtomPosition * QPointData[i].QPoint)).array().exp();
+      QPointData[i].ModeData[j].AtomMovement.resize(AtomPosition.rows(), 3);
       for (int k = 0; k < AtomPosition.rows(); k++)
-        QPointData[i].ModeData[j].AtomMovement.row(k) *=
-          std::exp(-2 * std::numbers::pi_v<double> * 1i * (QPointData[i].QPoint.dot(AtomPosition.row(k))));
+        QPointData[i].ModeData[j].AtomMovement.row(k) = eigenvectors.row(k)
+          * std::exp(-2 * std::numbers::pi_v<double> * 1i
+              * (atom_position_to_super_cell.row(k).dot(QPointData[i].QPoint)));
+
+      // print AtomMovement
+      // std::cout << "AtomMovement" << std::endl;
+      // std::cout << QPointData[i].ModeData[j].AtomMovement << std::endl;
+
+
+      // 这里还要需要做归一化处理
+      // phonopy 的文档似乎没有保证一定做了归一化处理, 再来做一遍吧.
+      auto sum = QPointData[i].ModeData[j].AtomMovement.cwiseAbs2().sum();
+      QPointData[i].ModeData[j].AtomMovement /= std::sqrt(sum);
     }
   }
 }
