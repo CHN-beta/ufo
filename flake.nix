@@ -1,11 +1,12 @@
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
+  inputs.nixos.url = "github:CHN-beta/nixos";
 
-  outputs = inputs: let pkgs = inputs.nixpkgs.legacyPackages.x86_64-linux; in
+  outputs = inputs: let pkgs = inputs.nixos.nixosConfigurations.pc.pkgs; in
   {
-    devShell.x86_64-linux = pkgs.mkShell.override { stdenv = pkgs.gcc13Stdenv; }
+    devShell.x86_64-linux = pkgs.mkShell.override { stdenv = pkgs.genericPackages.gcc13Stdenv; }
     {
-      buildInputs = with pkgs; [ yaml-cpp eigen fmt ];
+      buildInputs = with pkgs;
+        [ yaml-cpp eigen fmt (localPackages.concurrencpp.override { stdenv = genericPackages.gcc13Stdenv; }) ];
       nativeBuildInputs = with pkgs; [ gdb ];
     };
   };
