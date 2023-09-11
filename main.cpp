@@ -148,16 +148,22 @@ int main(int argc, const char** argv)
     for (unsigned i_of_mode = 0; i_of_mode < num_of_mode; i_of_mode++)
     {
       auto num_of_sub_qpoint = input.SuperCellMultiplier.diagonal().prod();
-      projection_coefficient[i_of_folded_qpoint][i_of_mode].resize(num_of_sub_qpoint);
+      auto& _ = projection_coefficient[i_of_folded_qpoint][i_of_mode];
+      _.resize(num_of_sub_qpoint);
       for (unsigned i_of_sub_qpoint = 0; i_of_sub_qpoint < num_of_sub_qpoint; i_of_sub_qpoint++)
         // 对于 basis 中, 对应于单胞倒格子的部分, 以及对应于不同方向的部分, 分别求内积, 然后求绝对值, 然后求和
-        // 最后, 还应该除以原子数
         for (unsigned i_of_basis = 0; i_of_basis < input.PrimativeCellBasisNumber.prod(); i_of_basis++)
-          projection_coefficient[i_of_folded_qpoint][i_of_mode][i_of_sub_qpoint] +=
+          _[i_of_sub_qpoint] +=
           (
             basis[i_of_sub_qpoint][i_of_basis].transpose()
               * input.QPointData[i_of_folded_qpoint].ModeData[i_of_mode].AtomMovement
-          ).array().abs().sum() / input.AtomPosition.rows();
+          ).array().abs().sum();
+
+      // 如果是严格地将向量分解到一组完备的基矢上, 那么不需要对计算得到的权重再做归一化处理
+      // 但这里并不是这样一个严格的概念. 因此对分解到各个 sub qpoint 上的权重做归一化处理
+      auto sum = std::accumulate(_.begin(), _.end(), 0.);
+      for (auto& __ : _)
+        __ /= sum;
     }
   }
 
@@ -214,32 +220,19 @@ bool YAML::convert<Input>::decode(const Node& node, Input& input)
     for (unsigned j = 0; j < band.size(); j++)
     {
       input.QPointData[i].ModeData[j].Frequency = band[j]["frequency"].as<double>();
-      auto eigenvectors = Eigen::MatrixX3cd(input.AtomPosition.rows(), 3);
       auto eigenvector_vectors = band[j]["eigenvector"]
         .as<std::vector<std::vector<std::vector<double>>>>();
+      auto eigenvectors = Eigen::MatrixX3cd(input.AtomPosition.rows(), 3);
       for (unsigned k = 0; k < input.AtomPosition.rows(); k++)
         for (unsigned l = 0; l < 3; l++)
           eigenvectors(k, l)
             = eigenvector_vectors[k][l][0] + 1i * eigenvector_vectors[k][l][1];
       // 需要对读入的原子运动状态作相位转换, 使得它们与我们的约定一致(对超胞周期性重复)
-      input.QPointData[i].ModeData[j].AtomMovement
-        = eigenvectors.array().colwise() * (-2 * std::numbers::pi_v<double> * 1i
-            * (atom_position_to_super_cell * input.QPointData[i].QPoint)).array().exp();
-      // input.QPointData[i].ModeData[j].AtomMovement.resize(input.AtomPosition.rows(), 3);
-      // for (unsigned k = 0; k < input.AtomPosition.rows(); k++)
-      //   input.QPointData[i].ModeData[j].AtomMovement.row(k) = eigenvectors.row(k)
-      //     * std::exp(-2 * std::numbers::pi_v<double> * 1i
-      //         * (atom_position_to_super_cell.row(k).dot(input.QPointData[i].QPoint)));
-
-      // 这里还要需要做归一化处理
-      // 这里的归一化其实并不是必须的, 因为在计算投影系数的时候, 还会进行一次归一化.
-      // 因为计算量并不大, 因此这里还是做一次归一化, 达到形式上的正确.
-      auto average =
-      ({
-        auto& _ = input.QPointData[i].ModeData[j].AtomMovement; 
-        _.cwiseAbs2().rowwise().sum().cwiseSqrt().sum() / _.rows();
-      });
-      input.QPointData[i].ModeData[j].AtomMovement /= average;
+      // 这里还要需要做归一化处理 (指将数据简单地作为向量处理的归一化)
+      auto& AtomMovement = input.QPointData[i].ModeData[j].AtomMovement;
+      AtomMovement = eigenvectors.array().colwise() * (-2 * std::numbers::pi_v<double> * 1i
+        * (atom_position_to_super_cell * input.QPointData[i].QPoint)).array().exp();
+      AtomMovement /= AtomMovement.norm();
     }
   }
 
