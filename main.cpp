@@ -9,6 +9,7 @@
 # include <yaml-cpp/yaml.h>
 # include <eigen3/Eigen/Dense>
 # include <concurrencpp/concurrencpp.h>
+# include <fmt/format.h>
 
 using namespace std::literals;
 
@@ -49,16 +50,6 @@ struct Input
     std::vector<ModeDataType_> ModeData;
   };
   std::vector<QPointDataType_> QPointData;
-
-  // 从文件中读取输入, 文件中应当包含: (大多数据可以直接从 phonopy 的输出中复制)
-  // 单胞的格矢: lattice 单位为埃 直接从 phonopy 的输出中复制
-  // 超胞的倍数: SuperCellMultiplier 手动输入, 为一个包含三个整数的数组
-  // 平面波的基矢个数: PrimativeCellBasisNumber 手动输入, 为一个包含三个整数的数组
-  // 超胞中原子的坐标: points[*].coordinates 单位为超胞的格矢 直接从 phonopy 的输出中复制
-  // 各个 Q 点的坐标: phonon[*].q-position 单位为超胞的倒格子的格矢 直接从 phonopy 的输出中复制
-  // 各个模式的频率: phonon[*].band[*].frequency 单位为 THz 直接从 phonopy 的输出中复制
-  // 各个模式的原子运动状态: phonon[*].band[*].eigenvector 直接从 phonopy 的输出中复制
-  // 文件中可以有多余的项目, 多余的项目不管.
 };
 
 struct Output
@@ -188,6 +179,15 @@ int main(int argc, const char** argv)
   std::ofstream(argv[2]) << YAML::Node(output);
 }
 
+// 从文件中读取输入, 文件中应当包含: (大多数据可以直接从 phonopy 的输出中复制)
+// 单胞的格矢: lattice 单位为埃 直接从 phonopy 的输出中复制
+// 超胞的倍数: SuperCellMultiplier 手动输入, 为一个包含三个整数的数组
+// 平面波的基矢个数: PrimativeCellBasisNumber 手动输入, 为一个包含三个整数的数组
+// 超胞中原子的坐标: points[*].coordinates 单位为超胞的格矢 直接从 phonopy 的输出中复制
+// 各个 Q 点的坐标: phonon[*].q-position 单位为超胞的倒格子的格矢 直接从 phonopy 的输出中复制
+// 各个模式的频率: phonon[*].band[*].frequency 单位为 THz 直接从 phonopy 的输出中复制
+// 各个模式的原子运动状态: phonon[*].band[*].eigenvector 直接从 phonopy 的输出中复制
+// 文件中可以有多余的项目, 多余的项目不管.
 bool YAML::convert<Input>::decode(const Node& node, Input& input)
 {
   for (unsigned i = 0; i < 3; i++)
