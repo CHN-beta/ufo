@@ -23,9 +23,9 @@ struct Input
   // 单胞的三个格矢，每行表示一个格矢的坐标，单位为埃
   Eigen::Matrix3d PrimativeCell;
   // 超胞在各个方向上是单胞的多少倍，这是一个对角矩阵
+  // 暂时不考虑不是对角矩阵的情况
   Eigen::Matrix<unsigned, 3, 3> SuperCellMultiplier;
   // 在单胞内取几个平面波的基矢
-  // 在 debug 阶段, 先仅取一个
   Eigen::Vector<unsigned, 3> PrimativeCellBasisNumber;
   // 超胞中原子的坐标，每行表示一个原子的坐标，单位为埃
   Eigen::MatrixX3d AtomPosition;
@@ -60,6 +60,9 @@ struct Output
     // Q 点的坐标，单位为超胞的倒格矢
     Eigen::Vector3d QPoint;
 
+    // 来源于哪个 Q 点, 单位为超胞的倒格矢
+    Eigen::Vector3d Source;
+
     // 关于这个 Q 点上各个模式的数据
     struct ModeDataType_
     {
@@ -67,8 +70,6 @@ struct Output
       double Frequency;
       // 模式的权重
       double Weight;
-      // 来源于哪个 Q 点, 单位为超胞的倒格矢
-      Eigen::Vector3d Source;
     };
     std::vector<ModeDataType_> ModeData;
   };
@@ -167,16 +168,58 @@ int main(int argc, const char** argv)
       auto& sub_qpoint = output.QPointData.emplace_back();
       sub_qpoint.QPoint = input.SuperCellMultiplier.cast<double>().inverse() *
         (input.QPointData[i_of_folded_qpoint].QPoint + xyz_of_sub_qpoint.cast<double>());
+      sub_qpoint.Source = input.QPointData[i_of_folded_qpoint].QPoint;
+
+      // 从小到大枚举所有的模式，并将相近的模式（相差小于 0.01 THz）合并
+      std::map<double, double> frequency_to_weight;
       for (unsigned i_of_mode = 0; i_of_mode < input.QPointData[i_of_folded_qpoint].ModeData.size(); i_of_mode++)
       {
-        auto& mode = sub_qpoint.ModeData.emplace_back();
-        mode.Frequency = input.QPointData[i_of_folded_qpoint].ModeData[i_of_mode].Frequency;
-        mode.Weight = projection_coefficient[i_of_folded_qpoint][i_of_mode][i_of_sub_qpoint];
-        mode.Source = input.QPointData[i_of_folded_qpoint].QPoint;
+        auto frequency = input.QPointData[i_of_folded_qpoint].ModeData[i_of_mode].Frequency;
+        auto weight = projection_coefficient[i_of_folded_qpoint][i_of_mode][i_of_sub_qpoint];
+        auto it_lower = frequency_to_weight.lower_bound(frequency - 0.01);
+        auto it_upper = frequency_to_weight.upper_bound(frequency + 0.01);
+        if (it_lower == it_upper)
+          frequency_to_weight[frequency] = weight;
+        else
+        {
+          auto frequency_sum = std::accumulate(it_lower, it_upper, 0.,
+            [](const auto& a, const auto& b) { return a + b.first * b.second; });
+          auto weight_sum = std::accumulate(it_lower, it_upper, 0.,
+            [](const auto& a, const auto& b) { return a + b.second; });
+          frequency_sum += frequency * weight;
+          weight_sum += weight;
+          frequency_to_weight.erase(it_lower, it_upper);
+          frequency_to_weight[frequency_sum / weight_sum] = weight_sum;
+        }
       }
+      // 仅保留权重大于 0.01 的模式
+      for (auto& mode : frequency_to_weight)
+        if (mode.second > 0.01)
+        {
+          auto& _ = sub_qpoint.ModeData.emplace_back();
+          _.Frequency = mode.first;
+          _.Weight = mode.second;
+        }
     }
 
-  std::ofstream(argv[2]) << YAML::Node(output);
+  // std::ofstream(argv[2]) << YAML::Node(output);
+  // YAML 输出得太丑了，我来自己写
+  std::ofstream(argv[2]) << [output]
+  {
+    std::stringstream print;
+    print << "QPointData:\n";
+    for (auto& qpoint: output.QPointData)
+    {
+      print << fmt::format("  - QPoint: [ {:.3f} {:.3f} {:.3f} ]\n",
+        qpoint.QPoint[0], qpoint.QPoint[1], qpoint.QPoint[2]);
+      print << fmt::format("    Source: [ {:.3f} {:.3f} {:.3f} ]\n",
+        qpoint.Source[0], qpoint.Source[1], qpoint.Source[2]);
+      print << "    ModeData:\n";
+      for (auto& mode: qpoint.ModeData)
+        print << fmt::format("      - {{ Frequency: {:.3f}, Weight: {:.3f} }}\n", mode.Frequency, mode.Weight);
+    }
+    return print.str();
+  }();
 }
 
 // 从文件中读取输入, 文件中应当包含: (大多数据可以直接从 phonopy 的输出中复制)
@@ -230,37 +273,39 @@ bool YAML::convert<Input>::decode(const Node& node, Input& input)
       // 需要对读入的原子运动状态作相位转换, 使得它们与我们的约定一致(对超胞周期性重复)
       // 这里还要需要做归一化处理 (指将数据简单地作为向量处理的归一化)
       auto& AtomMovement = input.QPointData[i].ModeData[j].AtomMovement;
-      AtomMovement = eigenvectors.array().colwise() * (-2 * std::numbers::pi_v<double> * 1i
-        * (atom_position_to_super_cell * input.QPointData[i].QPoint)).array().exp();
-      AtomMovement /= AtomMovement.norm();
+      // AtomMovement = eigenvectors.array().colwise() * (-2 * std::numbers::pi_v<double> * 1i
+      //   * (atom_position_to_super_cell * input.QPointData[i].QPoint)).array().exp();
+      // AtomMovement /= AtomMovement.norm();
+      // phonopy 似乎已经进行了相位的转换！为什么？
+      AtomMovement = eigenvectors / eigenvectors.norm();
     }
   }
 
   return true;
 }
 
-auto YAML::convert<Output>::encode(const Output& output) -> Node
-{
-  Node node;
-  node["QPointData"] = Node(NodeType::Sequence);
-  for (unsigned i = 0; i < output.QPointData.size(); i++)
-  {
-    node["QPointData"][i]["QPoint"] =
-    ({
-      auto& _ = output.QPointData[i].QPoint;
-      std::vector<double>(_.data(), _.data() + _.size());
-    });
-    node["QPointData"][i]["ModeData"] = Node(NodeType::Sequence);
-    for (unsigned j = 0; j < output.QPointData[i].ModeData.size(); j++)
-    {
-      node["QPointData"][i]["ModeData"][j]["Frequency"] = output.QPointData[i].ModeData[j].Frequency;
-      node["QPointData"][i]["ModeData"][j]["Weight"] = output.QPointData[i].ModeData[j].Weight;
-      node["QPointData"][i]["ModeData"][j]["Source"] =
-      ({
-        auto& _ = output.QPointData[i].ModeData[j].Source;
-        std::vector<double>(_.data(), _.data() + _.size());
-      });
-    }
-  }
-  return node;
-}
+// auto YAML::convert<Output>::encode(const Output& output) -> Node
+// {
+//   Node node;
+//   node["QPointData"] = Node(NodeType::Sequence);
+//   for (unsigned i = 0; i < output.QPointData.size(); i++)
+//   {
+//     node["QPointData"][i]["QPoint"] =
+//     ({
+//       auto& _ = output.QPointData[i].QPoint;
+//       std::vector<double>(_.data(), _.data() + _.size());
+//     });
+//     node["QPointData"][i]["ModeData"] = Node(NodeType::Sequence);
+//     for (unsigned j = 0; j < output.QPointData[i].ModeData.size(); j++)
+//     {
+//       node["QPointData"][i]["ModeData"][j]["Frequency"] = output.QPointData[i].ModeData[j].Frequency;
+//       node["QPointData"][i]["ModeData"][j]["Weight"] = output.QPointData[i].ModeData[j].Weight;
+//       node["QPointData"][i]["ModeData"][j]["Source"] =
+//       ({
+//         auto& _ = output.QPointData[i].ModeData[j].Source;
+//         std::vector<double>(_.data(), _.data() + _.size());
+//       });
+//     }
+//   }
+//   return node;
+// }
