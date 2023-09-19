@@ -7,7 +7,7 @@
     {
       buildInputs = with pkgs;
         [ yaml-cpp eigen fmt (localPackages.concurrencpp.override { stdenv = genericPackages.gcc13Stdenv; }) highfive ];
-      nativeBuildInputs = with pkgs; [ gdb ];
+      hardeningDisable = [ "all" ];
     };
   };
 }

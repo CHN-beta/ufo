@@ -22,9 +22,19 @@ struct Input
 {
   // 单胞的三个格矢，每行表示一个格矢的坐标，单位为埃
   Eigen::Matrix3d PrimativeCell;
-  // 超胞在各个方向上是单胞的多少倍，这是一个对角矩阵
-  // 暂时不考虑不是对角矩阵的情况
-  Eigen::Matrix<unsigned, 3, 3> SuperCellMultiplier;
+  // 单胞到超胞的格矢转换时用到的矩阵
+  // SuperCellMultiplier 是一个三维列向量且各个元素都是整数，表示单胞在各个方向扩大到多少倍之后，可以得到和超胞一样的体积
+  // SuperCellDeformation 是一个行列式为 1 的矩阵，它表示经过 SuperCellMultiplier 扩大后，还需要怎样的变换才能得到超胞
+  // SuperCell = (SuperCellDeformation * SuperCellMultiplier.asDiagonal()) * PrimativeCell
+  // ReciprocalPrimativeCell = (SuperCellDeformation * SuperCellMultiplier.asDiagonal()).transpose()
+  //  * ReciprocalSuperCell
+  // Position = PositionToCell(line vector) * Cell
+  // InversePosition = InversePositionToCell(line vector) * ReciprocalCell
+  // PositionToSuperCell(line vector) * SuperCell = PositionToPrimativeCell(line vector) * PrimativeCell
+  // ReciprocalPositionToSuperCell(line vector) * ReciprocalSuperCell
+  //  = ReciprocalPositionToPrimativeCell(line vector) * ReciprocalPrimativeCell
+  Eigen::Vector<unsigned, 3> SuperCellMultiplier;
+  Eigen::Matrix<double, 3, 3> SuperCellDeformation;
   // 在单胞内取几个平面波的基矢
   Eigen::Vector<unsigned, 3> PrimativeCellBasisNumber;
   // 超胞中原子的坐标，每行表示一个原子的坐标，单位为埃
@@ -110,48 +120,50 @@ int main(int argc, const char** argv)
   // 将超胞中原子的运动状态投影到这些基矢上, 计算出投影的系数, 就可以将超胞的原子运动状态分解到单胞中的多个 q 点上.
 
   // 构建基
-  // 外层下标对应超胞倒格子的整数倍那部分(第二部分), 也就是对应不同反折叠后的 q 点(sub qpoint)
-  // 内层下标对应单胞倒格子的整数倍那部分(第一部分), 也就是对应同一个反折叠后的 q 点上的不同平面波
-  std::vector<std::vector<Eigen::VectorXcd>> basis;
-  basis.resize(input.SuperCellMultiplier.diagonal().prod());
-  for (auto [xyz_of_sub_qpoint, i_of_sub_qpoint]
-    : triplet_sequence(input.SuperCellMultiplier.diagonal()))
+  // 每个 q 点对应的一组 sub qpoint。不同的 q 点所对应的 sub qpoint 是不一样的，但 sub qpoint 与 q 点的相对位置一致。
+  // 这里 xyz_of_diff_of_sub_qpoint 即表示这个相对位置。
+  // 由于基只与这个相对位置有关（也就是说，不同 q 点的基是一样的），因此可以先计算出所有的基，这样降低计算量。
+  // 外层下标对应超胞倒格子的整数倍那部分(第二部分), 也就是不同的 sub qpoint
+  // 内层下标对应单胞倒格子的整数倍那部分(第一部分), 也就是 sub qpoint 上的不同平面波（取的数量越多，结果越精确）
+  std::vector<std::vector<Eigen::VectorXcd>> basis(input.SuperCellMultiplier.prod());
+  // 每个 q 点对应的一组 sub qpoint。不同的 q 点所对应的 sub qpoint 是不一样的，但 sub qpoint 与 q 点的相对位置一致。
+  // 这里 xyz_of_diff_of_sub_qpoint 即表示这个相对位置，单位为超胞的倒格矢
+  for (auto [xyz_of_diff_of_sub_qpoint_by_reciprocal_super_cell, i_of_diff_of_sub_qpoint]
+    : triplet_sequence(input.SuperCellMultiplier))
   {
-    basis[i_of_sub_qpoint].resize(input.PrimativeCellBasisNumber.prod());
+    basis[i_of_diff_of_sub_qpoint].resize(input.PrimativeCellBasisNumber.prod());
     for (auto [xyz_of_basis, i_of_basis] : triplet_sequence(input.PrimativeCellBasisNumber))
     {
       // 计算 q 点的坐标, 单位为单胞的倒格矢
-      auto qpoint_relative_to_primative_cell = xyz_of_basis.cast<double>()
-        + input.SuperCellMultiplier.cast<double>().inverse() * xyz_of_sub_qpoint.cast<double>();
+      auto diff_of_sub_qpoint_by_reciprocal_primative_cell = xyz_of_basis.cast<double>()
+        + input.SuperCellMultiplier.cast<double>().cwiseInverse().asDiagonal()
+        * xyz_of_diff_of_sub_qpoint_by_reciprocal_super_cell.cast<double>();
       // 将 q 点坐标转换为埃^-1
-      auto qpoint = (qpoint_relative_to_primative_cell.transpose() * (input.PrimativeCell.transpose().inverse()))
-        .transpose();
+      auto qpoint = (diff_of_sub_qpoint_by_reciprocal_primative_cell.transpose()
+        * (input.PrimativeCell.transpose().inverse())).transpose();
       // 计算基矢
-      basis[i_of_sub_qpoint][i_of_basis]
-        = (-2 * std::numbers::pi_v<double> * 1i * (input.AtomPosition * qpoint)).array().exp();
+      basis[i_of_diff_of_sub_qpoint][i_of_basis]
+        = (2i * std::numbers::pi_v<double> * (input.AtomPosition * qpoint)).array().exp();
     }
   }
 
   // 计算投影的结果
-  // 最外层下标对应反折叠前的 q 点, 第二层下标对应不同模式, 第三层下标对应这个模式在反折叠后的 q 点
-  std::vector<std::vector<std::vector<double>>> projection_coefficient;
-  projection_coefficient.resize(input.QPointData.size());
-  for (unsigned i_of_folded_qpoint = 0; i_of_folded_qpoint < input.QPointData.size(); i_of_folded_qpoint++)
+  // 最外层下标对应反折叠前的 q 点, 第二层下标对应不同模式, 第三层下标对应这个模式在反折叠后的 q 点(sub qpoint)
+  std::vector<std::vector<std::vector<double>>> projection_coefficient(input.QPointData.size());
+  for (unsigned i_of_qpoint = 0; i_of_qpoint < input.QPointData.size(); i_of_qpoint++)
   {
-    auto num_of_mode = input.QPointData[i_of_folded_qpoint].ModeData.size();
-    projection_coefficient[i_of_folded_qpoint].resize(num_of_mode);
-    for (unsigned i_of_mode = 0; i_of_mode < num_of_mode; i_of_mode++)
+    projection_coefficient[i_of_qpoint].resize(input.QPointData[i_of_qpoint].ModeData.size());
+    for (unsigned i_of_mode = 0; i_of_mode < input.QPointData[i_of_qpoint].ModeData.size(); i_of_mode++)
     {
-      auto num_of_sub_qpoint = input.SuperCellMultiplier.diagonal().prod();
-      auto& _ = projection_coefficient[i_of_folded_qpoint][i_of_mode];
-      _.resize(num_of_sub_qpoint);
-      for (unsigned i_of_sub_qpoint = 0; i_of_sub_qpoint < num_of_sub_qpoint; i_of_sub_qpoint++)
-        // 对于 basis 中, 对应于单胞倒格子的部分, 以及对应于不同方向的部分, 分别求内积, 然后求绝对值, 然后求和
+      auto& _ = projection_coefficient[i_of_qpoint][i_of_mode];
+      _.resize(input.SuperCellMultiplier.prod());
+      for (unsigned i_of_sub_qpoint = 0; i_of_sub_qpoint < input.SuperCellMultiplier.prod(); i_of_sub_qpoint++)
+        // 对于 basis 中, 对应于单胞倒格子的部分, 以及对应于不同方向的部分, 分别求内积, 然后求模方和
         for (unsigned i_of_basis = 0; i_of_basis < input.PrimativeCellBasisNumber.prod(); i_of_basis++)
           _[i_of_sub_qpoint] +=
           (
-            basis[i_of_sub_qpoint][i_of_basis].transpose()
-              * input.QPointData[i_of_folded_qpoint].ModeData[i_of_mode].AtomMovement
+            basis[i_of_sub_qpoint][i_of_basis].transpose().conjugate()
+              * input.QPointData[i_of_qpoint].ModeData[i_of_mode].AtomMovement
           ).array().abs2().sum();
 
       // 如果是严格地将向量分解到一组完备的基矢上, 那么不需要对计算得到的权重再做归一化处理
@@ -164,23 +176,32 @@ int main(int argc, const char** argv)
 
   // 填充输出对象
   Output output;
-  for (unsigned i_of_folded_qpoint = 0; i_of_folded_qpoint < input.QPointData.size(); i_of_folded_qpoint++)
-    for (auto [xyz_of_sub_qpoint, i_of_sub_qpoint]
-      : triplet_sequence(input.SuperCellMultiplier.diagonal()))
+  for (unsigned i_of_qpoint = 0; i_of_qpoint < input.QPointData.size(); i_of_qpoint++)
+    for (auto [xyz_of_diff_of_sub_qpoint_by_reciprocal_super_cell, i_of_sub_qpoint]
+      : triplet_sequence(input.SuperCellMultiplier))
     {
-      auto& sub_qpoint = output.QPointData.emplace_back();
-      sub_qpoint.QPoint = input.SuperCellMultiplier.cast<double>().inverse() *
-        (input.QPointData[i_of_folded_qpoint].QPoint + xyz_of_sub_qpoint.cast<double>());
-      sub_qpoint.Source = input.QPointData[i_of_folded_qpoint].QPoint;
-
+      auto& _ = output.QPointData.emplace_back();
+      auto reciprocal_super_cell =
+        (input.SuperCellDeformation * input.SuperCellMultiplier.cast<double>().asDiagonal() * input.PrimativeCell)
+        .inverse().transpose();
+      // sub qpoint 的坐标，单位为埃^-1
+      auto sub_qpoint =
+        ((xyz_of_diff_of_sub_qpoint_by_reciprocal_super_cell.cast<double>() + input.QPointData[i_of_qpoint].QPoint)
+        .transpose() * reciprocal_super_cell).transpose();
+      // 将坐标转换为相对于单胞的倒格矢的坐标并写入
+      // 由 sub_qpoint.transpose() = sub_qpoint_by_reciprocal_primative_cell.transpose()
+      //  * PrimativeCell.transpose().inverse()
+      // 得到 sub_qpoint_by_reciprocal_primative_cell = PrimativeCell * sub_qpoint
+      _.QPoint = input.PrimativeCell * sub_qpoint;
+      _.Source = input.QPointData[i_of_qpoint].QPoint;
       if (!input.Debug.value_or(false))
       {
         // 从小到大枚举所有的模式，并将相近的模式（相差小于 0.01 THz）合并
         std::map<double, double> frequency_to_weight;
-        for (unsigned i_of_mode = 0; i_of_mode < input.QPointData[i_of_folded_qpoint].ModeData.size(); i_of_mode++)
+        for (unsigned i_of_mode = 0; i_of_mode < input.QPointData[i_of_qpoint].ModeData.size(); i_of_mode++)
         {
-          auto frequency = input.QPointData[i_of_folded_qpoint].ModeData[i_of_mode].Frequency;
-          auto weight = projection_coefficient[i_of_folded_qpoint][i_of_mode][i_of_sub_qpoint];
+          auto frequency = input.QPointData[i_of_qpoint].ModeData[i_of_mode].Frequency;
+          auto weight = projection_coefficient[i_of_qpoint][i_of_mode][i_of_sub_qpoint];
           auto it_lower = frequency_to_weight.lower_bound(frequency - 0.01);
           auto it_upper = frequency_to_weight.upper_bound(frequency + 0.01);
           if (it_lower == it_upper)
@@ -201,17 +222,17 @@ int main(int argc, const char** argv)
         for (auto& mode : frequency_to_weight)
           if (mode.second > 0.01)
           {
-            auto& _ = sub_qpoint.ModeData.emplace_back();
-            _.Frequency = mode.first;
-            _.Weight = mode.second;
+            auto& __ = _.ModeData.emplace_back();
+            __.Frequency = mode.first;
+            __.Weight = mode.second;
           }
       }
       else
-        for (unsigned i_of_mode = 0; i_of_mode < input.QPointData[i_of_folded_qpoint].ModeData.size(); i_of_mode++)
+        for (unsigned i_of_mode = 0; i_of_mode < input.QPointData[i_of_qpoint].ModeData.size(); i_of_mode++)
         {
-          auto& _ = sub_qpoint.ModeData.emplace_back();
-          _.Frequency = input.QPointData[i_of_folded_qpoint].ModeData[i_of_mode].Frequency;
-          _.Weight = projection_coefficient[i_of_folded_qpoint][i_of_mode][i_of_sub_qpoint];
+          auto& __ = _.ModeData.emplace_back();
+          __.Frequency = input.QPointData[i_of_qpoint].ModeData[i_of_mode].Frequency;
+          __.Weight = projection_coefficient[i_of_qpoint][i_of_mode][i_of_sub_qpoint];
         }
     }
 
@@ -254,7 +275,11 @@ bool YAML::convert<Input>::decode(const Node& node, Input& input)
 
   input.SuperCellMultiplier.setZero();
   for (unsigned i = 0; i < 3; i++)
-    input.SuperCellMultiplier(i, i) = node["SuperCellMultiplier"][i].as<int>();
+    input.SuperCellMultiplier(i) = node["SuperCellMultiplier"][i].as<int>();
+
+  for (unsigned i = 0; i < 3; i++)
+    for (unsigned j = 0; j < 3; j++)
+      input.SuperCellDeformation(i, j) = node["SuperCellDeformation"][i][j].as<double>();
 
   for (unsigned i = 0; i < 3; i++)
     input.PrimativeCellBasisNumber(i) = node["PrimativeCellBasisNumber"][i].as<int>();
@@ -267,7 +292,8 @@ bool YAML::convert<Input>::decode(const Node& node, Input& input)
   for (unsigned i = 0; i < points.size(); i++)
     for (unsigned j = 0; j < 3; j++)
       atom_position_to_super_cell(i, j) = points[i]["coordinates"][j].as<double>();
-  input.AtomPosition = atom_position_to_super_cell * (input.SuperCellMultiplier.cast<double>() * input.PrimativeCell);
+  input.AtomPosition = atom_position_to_super_cell
+    * (input.SuperCellDeformation * input.SuperCellMultiplier.cast<double>().asDiagonal() * input.PrimativeCell);
 
   auto phonon = node["phonon"].as<std::vector<YAML::Node>>();
   input.QPointData.resize(phonon.size());
@@ -301,29 +327,3 @@ bool YAML::convert<Input>::decode(const Node& node, Input& input)
 
   return true;
 }
-
-// auto YAML::convert<Output>::encode(const Output& output) -> Node
-// {
-//   Node node;
-//   node["QPointData"] = Node(NodeType::Sequence);
-//   for (unsigned i = 0; i < output.QPointData.size(); i++)
-//   {
-//     node["QPointData"][i]["QPoint"] =
-//     ({
-//       auto& _ = output.QPointData[i].QPoint;
-//       std::vector<double>(_.data(), _.data() + _.size());
-//     });
-//     node["QPointData"][i]["ModeData"] = Node(NodeType::Sequence);
-//     for (unsigned j = 0; j < output.QPointData[i].ModeData.size(); j++)
-//     {
-//       node["QPointData"][i]["ModeData"][j]["Frequency"] = output.QPointData[i].ModeData[j].Frequency;
-//       node["QPointData"][i]["ModeData"][j]["Weight"] = output.QPointData[i].ModeData[j].Weight;
-//       node["QPointData"][i]["ModeData"][j]["Source"] =
-//       ({
-//         auto& _ = output.QPointData[i].ModeData[j].Source;
-//         std::vector<double>(_.data(), _.data() + _.size());
-//       });
-//     }
-//   }
-//   return node;
-// }
