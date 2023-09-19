@@ -30,6 +30,9 @@ struct Input
   // 超胞中原子的坐标，每行表示一个原子的坐标，单位为埃
   Eigen::MatrixX3d AtomPosition;
 
+  // 如果打开调试，就不会合并相近的模式，不过滤权重过小的模式，也不会限制浮点的精度
+  std::optional<bool> Debug;
+
   // 关于各个 Q 点的数据
   struct QPointDataType_
   {
@@ -149,7 +152,7 @@ int main(int argc, const char** argv)
           (
             basis[i_of_sub_qpoint][i_of_basis].transpose()
               * input.QPointData[i_of_folded_qpoint].ModeData[i_of_mode].AtomMovement
-          ).array().abs().sum();
+          ).array().abs2().sum();
 
       // 如果是严格地将向量分解到一组完备的基矢上, 那么不需要对计算得到的权重再做归一化处理
       // 但这里并不是这样一个严格的概念. 因此对分解到各个 sub qpoint 上的权重做归一化处理
@@ -170,53 +173,65 @@ int main(int argc, const char** argv)
         (input.QPointData[i_of_folded_qpoint].QPoint + xyz_of_sub_qpoint.cast<double>());
       sub_qpoint.Source = input.QPointData[i_of_folded_qpoint].QPoint;
 
-      // 从小到大枚举所有的模式，并将相近的模式（相差小于 0.01 THz）合并
-      std::map<double, double> frequency_to_weight;
-      for (unsigned i_of_mode = 0; i_of_mode < input.QPointData[i_of_folded_qpoint].ModeData.size(); i_of_mode++)
+      if (!input.Debug.value_or(false))
       {
-        auto frequency = input.QPointData[i_of_folded_qpoint].ModeData[i_of_mode].Frequency;
-        auto weight = projection_coefficient[i_of_folded_qpoint][i_of_mode][i_of_sub_qpoint];
-        auto it_lower = frequency_to_weight.lower_bound(frequency - 0.01);
-        auto it_upper = frequency_to_weight.upper_bound(frequency + 0.01);
-        if (it_lower == it_upper)
-          frequency_to_weight[frequency] = weight;
-        else
+        // 从小到大枚举所有的模式，并将相近的模式（相差小于 0.01 THz）合并
+        std::map<double, double> frequency_to_weight;
+        for (unsigned i_of_mode = 0; i_of_mode < input.QPointData[i_of_folded_qpoint].ModeData.size(); i_of_mode++)
         {
-          auto frequency_sum = std::accumulate(it_lower, it_upper, 0.,
-            [](const auto& a, const auto& b) { return a + b.first * b.second; });
-          auto weight_sum = std::accumulate(it_lower, it_upper, 0.,
-            [](const auto& a, const auto& b) { return a + b.second; });
-          frequency_sum += frequency * weight;
-          weight_sum += weight;
-          frequency_to_weight.erase(it_lower, it_upper);
-          frequency_to_weight[frequency_sum / weight_sum] = weight_sum;
+          auto frequency = input.QPointData[i_of_folded_qpoint].ModeData[i_of_mode].Frequency;
+          auto weight = projection_coefficient[i_of_folded_qpoint][i_of_mode][i_of_sub_qpoint];
+          auto it_lower = frequency_to_weight.lower_bound(frequency - 0.01);
+          auto it_upper = frequency_to_weight.upper_bound(frequency + 0.01);
+          if (it_lower == it_upper)
+            frequency_to_weight[frequency] = weight;
+          else
+          {
+            auto frequency_sum = std::accumulate(it_lower, it_upper, 0.,
+              [](const auto& a, const auto& b) { return a + b.first * b.second; });
+            auto weight_sum = std::accumulate(it_lower, it_upper, 0.,
+              [](const auto& a, const auto& b) { return a + b.second; });
+            frequency_sum += frequency * weight;
+            weight_sum += weight;
+            frequency_to_weight.erase(it_lower, it_upper);
+            frequency_to_weight[frequency_sum / weight_sum] = weight_sum;
+          }
         }
+        // 仅保留权重大于 0.01 的模式
+        for (auto& mode : frequency_to_weight)
+          if (mode.second > 0.01)
+          {
+            auto& _ = sub_qpoint.ModeData.emplace_back();
+            _.Frequency = mode.first;
+            _.Weight = mode.second;
+          }
       }
-      // 仅保留权重大于 0.01 的模式
-      for (auto& mode : frequency_to_weight)
-        if (mode.second > 0.01)
+      else
+        for (unsigned i_of_mode = 0; i_of_mode < input.QPointData[i_of_folded_qpoint].ModeData.size(); i_of_mode++)
         {
           auto& _ = sub_qpoint.ModeData.emplace_back();
-          _.Frequency = mode.first;
-          _.Weight = mode.second;
+          _.Frequency = input.QPointData[i_of_folded_qpoint].ModeData[i_of_mode].Frequency;
+          _.Weight = projection_coefficient[i_of_folded_qpoint][i_of_mode][i_of_sub_qpoint];
         }
     }
 
   // std::ofstream(argv[2]) << YAML::Node(output);
   // YAML 输出得太丑了，我来自己写
-  std::ofstream(argv[2]) << [output]
+  std::ofstream(argv[2]) << [&]
   {
     std::stringstream print;
+    auto format = input.Debug.value_or(false) ? 10 : 3;
     print << "QPointData:\n";
     for (auto& qpoint: output.QPointData)
     {
-      print << fmt::format("  - QPoint: [ {:.3f} {:.3f} {:.3f} ]\n",
-        qpoint.QPoint[0], qpoint.QPoint[1], qpoint.QPoint[2]);
-      print << fmt::format("    Source: [ {:.3f} {:.3f} {:.3f} ]\n",
-        qpoint.Source[0], qpoint.Source[1], qpoint.Source[2]);
+      print << fmt::format("  - QPoint: [ {1:.{0}f}, {2:.{0}f}, {3:.{0}f} ]\n",
+        format, qpoint.QPoint[0], qpoint.QPoint[1], qpoint.QPoint[2]);
+      print << fmt::format("    Source: [ {1:.{0}f}, {2:.{0}f}, {3:.{0}f} ]\n",
+        format, qpoint.Source[0], qpoint.Source[1], qpoint.Source[2]);
       print << "    ModeData:\n";
       for (auto& mode: qpoint.ModeData)
-        print << fmt::format("      - {{ Frequency: {:.3f}, Weight: {:.3f} }}\n", mode.Frequency, mode.Weight);
+        print << fmt::format("      - {{ Frequency: {1:.{0}f}, Weight: {2:.{0}f} }}\n",
+          format, mode.Frequency, mode.Weight);
     }
     return print.str();
   }();
@@ -243,6 +258,9 @@ bool YAML::convert<Input>::decode(const Node& node, Input& input)
 
   for (unsigned i = 0; i < 3; i++)
     input.PrimativeCellBasisNumber(i) = node["PrimativeCellBasisNumber"][i].as<int>();
+
+  if (auto value = node["Debug"])
+    input.Debug = value.as<bool>();
 
   auto points = node["points"].as<std::vector<YAML::Node>>();
   auto atom_position_to_super_cell = Eigen::MatrixX3d(points.size(), 3);
