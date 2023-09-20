@@ -8,7 +8,7 @@
       buildInputs = with pkgs;
       [
         yaml-cpp eigen fmt (localPackages.concurrencpp.override { stdenv = genericPackages.gcc13Stdenv; }) highfive
-        hdf5.dev
+        hdf5.dev tbb
       ];
       hardeningDisable = [ "all" ];
     };

@@ -6,6 +6,8 @@
 # include <optional>
 # include <array>
 # include <utility>
+# include <execution>
+# include <syncstream>
 # include <yaml-cpp/yaml.h>
 # include <eigen3/Eigen/Dense>
 # include <concurrencpp/concurrencpp.h>
@@ -160,31 +162,37 @@ int main(int argc, const char** argv)
   // 计算投影的结果
   // 最外层下标对应反折叠前的 q 点, 第二层下标对应不同模式, 第三层下标对应这个模式在反折叠后的 q 点(sub qpoint)
   std::vector<std::vector<std::vector<double>>> projection_coefficient(input.QPointData.size());
-  for (unsigned i_of_qpoint = 0; i_of_qpoint < input.QPointData.size(); i_of_qpoint++)
+  std::atomic<unsigned> finished_qpoint(0);
+  // 对每个 q 点并行
+  std::transform
+  (
+    std::execution::par, input.QPointData.begin(), input.QPointData.end(),
+    projection_coefficient.begin(), [&](const auto& qpoint_data)
   {
-    std::cerr << fmt::format("\rCalculating projection coefficient for qpoint {}/{}...",
-      i_of_qpoint, input.QPointData.size()) << std::flush;
-    projection_coefficient[i_of_qpoint].resize(input.QPointData[i_of_qpoint].ModeData.size());
-    for (unsigned i_of_mode = 0; i_of_mode < input.QPointData[i_of_qpoint].ModeData.size(); i_of_mode++)
+    std::osyncstream(std::cerr) << fmt::format("\rCalculating projection coefficient...({}/{})",
+      finished_qpoint, input.QPointData.size()) << std::flush;
+    std::vector<std::vector<double>> projection_coefficient(qpoint_data.ModeData.size());
+    for (unsigned i_of_mode = 0; i_of_mode < qpoint_data.ModeData.size(); i_of_mode++)
     {
-      auto& _ = projection_coefficient[i_of_qpoint][i_of_mode];
+      auto& _ = projection_coefficient[i_of_mode];
       _.resize(input.SuperCellMultiplier.prod());
       for (unsigned i_of_sub_qpoint = 0; i_of_sub_qpoint < input.SuperCellMultiplier.prod(); i_of_sub_qpoint++)
         // 对于 basis 中, 对应于单胞倒格子的部分, 以及对应于不同方向的部分, 分别求内积, 然后求模方和
         for (unsigned i_of_basis = 0; i_of_basis < input.PrimativeCellBasisNumber.prod(); i_of_basis++)
           _[i_of_sub_qpoint] +=
-          (
-            basis[i_of_sub_qpoint][i_of_basis].transpose().conjugate()
-              * input.QPointData[i_of_qpoint].ModeData[i_of_mode].AtomMovement
-          ).array().abs2().sum();
-
+            (basis[i_of_sub_qpoint][i_of_basis].transpose().conjugate() * qpoint_data.ModeData[i_of_mode].AtomMovement)
+              .array().abs2().sum();
       // 如果是严格地将向量分解到一组完备的基矢上, 那么不需要对计算得到的权重再做归一化处理
       // 但这里并不是这样一个严格的概念. 因此对分解到各个 sub qpoint 上的权重做归一化处理
       auto sum = std::accumulate(_.begin(), _.end(), 0.);
       for (auto& __ : _)
         __ /= sum;
     }
-  }
+    finished_qpoint++;
+    std::osyncstream(std::cerr) << fmt::format("\rCalculating projection coefficient...({}/{})",
+      finished_qpoint, input.QPointData.size()) << std::flush;
+    return projection_coefficient;
+  });
   std::cerr << "Done." << std::endl;
 
   // 填充输出对象
@@ -251,10 +259,9 @@ int main(int argc, const char** argv)
     }
   std::cerr << "Done." << std::endl;
 
-  // std::ofstream(argv[2]) << YAML::Node(output);
   // YAML 输出得太丑了，我来自己写
   std::cerr << "Writing output file..." << std::flush;
-  std::ofstream(argv[2]) << [&]
+  std::ofstream(argc > 3 ? argv[2] : argv[3]) << [&]
   {
     std::stringstream print;
     auto format = input.Debug.value_or(false) ? 10 : 3;
