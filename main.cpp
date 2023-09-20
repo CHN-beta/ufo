@@ -10,6 +10,7 @@
 # include <eigen3/Eigen/Dense>
 # include <concurrencpp/concurrencpp.h>
 # include <fmt/format.h>
+# include <highfive/H5Easy.hpp>
 
 using namespace std::literals;
 
@@ -70,7 +71,7 @@ struct Output
   // 关于各个 Q 点的数据
   struct QPointDataType_
   {
-    // Q 点的坐标，单位为超胞的倒格矢
+    // Q 点的坐标，单位为单胞的倒格矢
     Eigen::Vector3d QPoint;
 
     // 来源于哪个 Q 点, 单位为超胞的倒格矢
@@ -110,7 +111,9 @@ int main(int argc, const char** argv)
   if (argc != 3)
     throw std::runtime_error("Usage: " + std::string(argv[0]) + " input.yaml output.yaml");
 
+  std::cerr << "Reading input file..." << std::flush;
   auto input = YAML::LoadFile(argv[1]).as<Input>();
+  std::cerr << "Done." << std::endl;
 
   // 反折叠的原理: 将超胞中的原子运动状态, 投影到一组平面波构成的基矢中.
   // 每一个平面波的波矢由两部分相加得到: 一部分是单胞倒格子的整数倍, 所取的个数有一定任意性, 论文中建议取大约单胞中原子个数那么多个;
@@ -125,6 +128,7 @@ int main(int argc, const char** argv)
   // 由于基只与这个相对位置有关（也就是说，不同 q 点的基是一样的），因此可以先计算出所有的基，这样降低计算量。
   // 外层下标对应超胞倒格子的整数倍那部分(第二部分), 也就是不同的 sub qpoint
   // 内层下标对应单胞倒格子的整数倍那部分(第一部分), 也就是 sub qpoint 上的不同平面波（取的数量越多，结果越精确）
+  std::cerr << "Calculating basis..." << std::flush;
   std::vector<std::vector<Eigen::VectorXcd>> basis(input.SuperCellMultiplier.prod());
   // 每个 q 点对应的一组 sub qpoint。不同的 q 点所对应的 sub qpoint 是不一样的，但 sub qpoint 与 q 点的相对位置一致。
   // 这里 xyz_of_diff_of_sub_qpoint 即表示这个相对位置，单位为超胞的倒格矢
@@ -146,12 +150,15 @@ int main(int argc, const char** argv)
         = (2i * std::numbers::pi_v<double> * (input.AtomPosition * qpoint)).array().exp();
     }
   }
+  std::cerr << "Done." << std::endl;
 
   // 计算投影的结果
   // 最外层下标对应反折叠前的 q 点, 第二层下标对应不同模式, 第三层下标对应这个模式在反折叠后的 q 点(sub qpoint)
   std::vector<std::vector<std::vector<double>>> projection_coefficient(input.QPointData.size());
   for (unsigned i_of_qpoint = 0; i_of_qpoint < input.QPointData.size(); i_of_qpoint++)
   {
+    std::cerr << fmt::format("\rCalculating projection coefficient for qpoint {}/{}...",
+      i_of_qpoint, input.QPointData.size()) << std::flush;
     projection_coefficient[i_of_qpoint].resize(input.QPointData[i_of_qpoint].ModeData.size());
     for (unsigned i_of_mode = 0; i_of_mode < input.QPointData[i_of_qpoint].ModeData.size(); i_of_mode++)
     {
@@ -173,8 +180,10 @@ int main(int argc, const char** argv)
         __ /= sum;
     }
   }
+  std::cerr << "Done." << std::endl;
 
   // 填充输出对象
+  std::cerr << "Filling output object..." << std::flush;
   Output output;
   for (unsigned i_of_qpoint = 0; i_of_qpoint < input.QPointData.size(); i_of_qpoint++)
     for (auto [xyz_of_diff_of_sub_qpoint_by_reciprocal_super_cell, i_of_sub_qpoint]
@@ -235,9 +244,11 @@ int main(int argc, const char** argv)
           __.Weight = projection_coefficient[i_of_qpoint][i_of_mode][i_of_sub_qpoint];
         }
     }
+  std::cerr << "Done." << std::endl;
 
   // std::ofstream(argv[2]) << YAML::Node(output);
   // YAML 输出得太丑了，我来自己写
+  std::cerr << "Writing output file..." << std::flush;
   std::ofstream(argv[2]) << [&]
   {
     std::stringstream print;
@@ -256,6 +267,7 @@ int main(int argc, const char** argv)
     }
     return print.str();
   }();
+  std::cerr << "Done." << std::endl;
 }
 
 // 从文件中读取输入, 文件中应当包含: (大多数据可以直接从 phonopy 的输出中复制)
