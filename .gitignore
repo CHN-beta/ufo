@@ -2,6 +2,7 @@
 .direnv
 test/*.yaml
 test/*.dat
+test/*.hdf5
 main
 plot
 out.yaml

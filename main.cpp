@@ -10,9 +10,15 @@
 # include <eigen3/Eigen/Dense>
 # include <concurrencpp/concurrencpp.h>
 # include <fmt/format.h>
-# include <highfive/H5Easy.hpp>
+# include <highfive/H5File.hpp>
+// # include <highfive/H5Easy.hpp>
 
 using namespace std::literals;
+
+struct PhonopyComplex { double r, i; };
+HighFive::CompoundType create_compound_complex()
+  { return {{"r", HighFive::AtomicType<double>{}}, {"i", HighFive::AtomicType<double>{}}}; }
+HIGHFIVE_REGISTER_TYPE(PhonopyComplex, create_compound_complex)
 
 // 在相位中, 约定为使用 $\exp (2 \pi i \vec{q} \cdot \vec{r})$ 来表示原子的运动状态
 //  (而不是 $\exp (-2 \pi i \vec{q} \cdot \vec{r})$)
@@ -64,6 +70,8 @@ struct Input
     std::vector<ModeDataType_> ModeData;
   };
   std::vector<QPointDataType_> QPointData;
+
+  Input(std::string yaml_file, std::optional<std::string> hdf5_file);
 };
 
 struct Output
@@ -90,9 +98,6 @@ struct Output
   std::vector<QPointDataType_> QPointData;
 };
 
-template<> struct YAML::convert<Input> { static bool decode(const Node& node, Input& input); };
-template<> struct YAML::convert<Output> { static Node encode(const Output& output); };
-
 concurrencpp::generator<std::pair<Eigen::Vector<unsigned, 3>, unsigned>>
   triplet_sequence(Eigen::Vector<unsigned, 3> range)
 {
@@ -108,11 +113,11 @@ concurrencpp::generator<std::pair<Eigen::Vector<unsigned, 3>, unsigned>>
 
 int main(int argc, const char** argv)
 {
-  if (argc != 3)
-    throw std::runtime_error("Usage: " + std::string(argv[0]) + " input.yaml output.yaml");
+  if (argc < 3 || argc > 5)
+    throw std::runtime_error("Usage: " + std::string(argv[0]) + " input.yaml [input.hdf5] output.yaml");
 
   std::cerr << "Reading input file..." << std::flush;
-  auto input = YAML::LoadFile(argv[1]).as<Input>();
+  Input input(argv[1], argc > 3 ? std::make_optional(argv[2]) : std::nullopt);
   std::cerr << "Done." << std::endl;
 
   // 反折叠的原理: 将超胞中的原子运动状态, 投影到一组平面波构成的基矢中.
@@ -279,63 +284,92 @@ int main(int argc, const char** argv)
 // 各个模式的频率: phonon[*].band[*].frequency 单位为 THz 直接从 phonopy 的输出中复制
 // 各个模式的原子运动状态: phonon[*].band[*].eigenvector 直接从 phonopy 的输出中复制
 // 文件中可以有多余的项目, 多余的项目不管.
-bool YAML::convert<Input>::decode(const Node& node, Input& input)
+Input::Input(std::string yaml_file, std::optional<std::string> hdf5_file)
 {
+  auto node = YAML::LoadFile(yaml_file);
   for (unsigned i = 0; i < 3; i++)
     for (unsigned j = 0; j < 3; j++)
-      input.PrimativeCell(i, j) = node["lattice"][i][j].as<double>();
+      PrimativeCell(i, j) = node["lattice"][i][j].as<double>();
 
-  input.SuperCellMultiplier.setZero();
   for (unsigned i = 0; i < 3; i++)
-    input.SuperCellMultiplier(i) = node["SuperCellMultiplier"][i].as<int>();
+    SuperCellMultiplier(i) = node["SuperCellMultiplier"][i].as<int>();
 
   for (unsigned i = 0; i < 3; i++)
     for (unsigned j = 0; j < 3; j++)
-      input.SuperCellDeformation(i, j) = node["SuperCellDeformation"][i][j].as<double>();
+      SuperCellDeformation(i, j) = node["SuperCellDeformation"][i][j].as<double>();
 
   for (unsigned i = 0; i < 3; i++)
-    input.PrimativeCellBasisNumber(i) = node["PrimativeCellBasisNumber"][i].as<int>();
+    PrimativeCellBasisNumber(i) = node["PrimativeCellBasisNumber"][i].as<int>();
 
   if (auto value = node["Debug"])
-    input.Debug = value.as<bool>();
+    Debug = value.as<bool>();
 
   auto points = node["points"].as<std::vector<YAML::Node>>();
   auto atom_position_to_super_cell = Eigen::MatrixX3d(points.size(), 3);
   for (unsigned i = 0; i < points.size(); i++)
     for (unsigned j = 0; j < 3; j++)
       atom_position_to_super_cell(i, j) = points[i]["coordinates"][j].as<double>();
-  input.AtomPosition = atom_position_to_super_cell
-    * (input.SuperCellDeformation * input.SuperCellMultiplier.cast<double>().asDiagonal() * input.PrimativeCell);
+  AtomPosition = atom_position_to_super_cell
+    * (SuperCellDeformation * SuperCellMultiplier.cast<double>().asDiagonal() * PrimativeCell);
 
-  auto phonon = node["phonon"].as<std::vector<YAML::Node>>();
-  input.QPointData.resize(phonon.size());
-  for (unsigned i = 0; i < phonon.size(); i++)
+  if (hdf5_file)
   {
-    input.QPointData[i].QPoint.resize(3);
-    for (unsigned j = 0; j < 3; j++)
-      input.QPointData[i].QPoint(j) = phonon[i]["q-position"][j].as<double>();
-    auto band = phonon[i]["band"].as<std::vector<YAML::Node>>();
-    input.QPointData[i].ModeData.resize(band.size());
-    for (unsigned j = 0; j < band.size(); j++)
+    HighFive::File file(*hdf5_file, HighFive::File::ReadOnly);
+    auto size = file.getDataSet("/frequency").getDimensions();
+    auto frequency = file.getDataSet("/frequency")
+      .read<std::vector<std::vector<std::vector<double>>>>();
+    auto eigenvector_vector = file.getDataSet("/eigenvector")
+      .read<std::vector<std::vector<std::vector<std::vector<PhonopyComplex>>>>>();
+    auto path = file.getDataSet("/path")
+      .read<std::vector<std::vector<std::vector<double>>>>();
+    QPointData.resize(size[0] * size[1]);
+    for (unsigned i = 0; i < size[0]; i++)
+      for (unsigned j = 0; j < size[1]; j++)
+      {
+        QPointData[i * size[1] + j].QPoint = Eigen::Vector3d(path[i][j].data());
+        QPointData[i * size[1] + j].ModeData.resize(size[2]);
+        for (unsigned k = 0; k < size[2]; k++)
+        {
+          QPointData[i * size[1] + j].ModeData[k].Frequency = frequency[i][j][k];
+          Eigen::MatrixX3cd eigenvectors(AtomPosition.rows(), 3);
+          for (unsigned l = 0; l < AtomPosition.rows(); l++)
+            for (unsigned m = 0; m < 3; m++)
+              eigenvectors(l, m)
+                = eigenvector_vector[i][j][k][l * 3 + m].r + eigenvector_vector[i][j][k][l * 3 + m].i * 1i;
+          QPointData[i * size[1] + j].ModeData[k].AtomMovement = eigenvectors / eigenvectors.norm();
+        }
+      }
+  }
+  else
+  {
+    auto phonon = node["phonon"].as<std::vector<YAML::Node>>();
+    QPointData.resize(phonon.size());
+    for (unsigned i = 0; i < phonon.size(); i++)
     {
-      input.QPointData[i].ModeData[j].Frequency = band[j]["frequency"].as<double>();
-      auto eigenvector_vectors = band[j]["eigenvector"]
-        .as<std::vector<std::vector<std::vector<double>>>>();
-      auto eigenvectors = Eigen::MatrixX3cd(input.AtomPosition.rows(), 3);
-      for (unsigned k = 0; k < input.AtomPosition.rows(); k++)
-        for (unsigned l = 0; l < 3; l++)
-          eigenvectors(k, l)
-            = eigenvector_vectors[k][l][0] + 1i * eigenvector_vectors[k][l][1];
-      // 需要对读入的原子运动状态作相位转换, 使得它们与我们的约定一致(对超胞周期性重复)
-      // 这里还要需要做归一化处理 (指将数据简单地作为向量处理的归一化)
-      auto& AtomMovement = input.QPointData[i].ModeData[j].AtomMovement;
-      // AtomMovement = eigenvectors.array().colwise() * (-2 * std::numbers::pi_v<double> * 1i
-      //   * (atom_position_to_super_cell * input.QPointData[i].QPoint)).array().exp();
-      // AtomMovement /= AtomMovement.norm();
-      // phonopy 似乎已经进行了相位的转换！为什么？
-      AtomMovement = eigenvectors / eigenvectors.norm();
+      QPointData[i].QPoint.resize(3);
+      for (unsigned j = 0; j < 3; j++)
+        QPointData[i].QPoint(j) = phonon[i]["q-position"][j].as<double>();
+      auto band = phonon[i]["band"].as<std::vector<YAML::Node>>();
+      QPointData[i].ModeData.resize(band.size());
+      for (unsigned j = 0; j < band.size(); j++)
+      {
+        QPointData[i].ModeData[j].Frequency = band[j]["frequency"].as<double>();
+        auto eigenvector_vectors = band[j]["eigenvector"]
+          .as<std::vector<std::vector<std::vector<double>>>>();
+        Eigen::MatrixX3cd eigenvectors(AtomPosition.rows(), 3);
+        for (unsigned k = 0; k < AtomPosition.rows(); k++)
+          for (unsigned l = 0; l < 3; l++)
+            eigenvectors(k, l)
+              = eigenvector_vectors[k][l][0] + 1i * eigenvector_vectors[k][l][1];
+        // 需要对读入的原子运动状态作相位转换, 使得它们与我们的约定一致(对超胞周期性重复)
+        // 这里还要需要做归一化处理 (指将数据简单地作为向量处理的归一化)
+        auto& AtomMovement = QPointData[i].ModeData[j].AtomMovement;
+        // AtomMovement = eigenvectors.array().colwise() * (-2 * std::numbers::pi_v<double> * 1i
+        //   * (atom_position_to_super_cell * input.QPointData[i].QPoint)).array().exp();
+        // AtomMovement /= AtomMovement.norm();
+        // phonopy 似乎已经进行了相位的转换！为什么？
+        AtomMovement = eigenvectors / eigenvectors.norm();
+      }
     }
   }
-
-  return true;
 }
