@@ -322,31 +322,51 @@ Input::Input(std::string yaml_file, std::optional<std::string> hdf5_file)
 
   if (hdf5_file)
   {
-    HighFive::File file(*hdf5_file, HighFive::File::ReadOnly);
-    auto size = file.getDataSet("/frequency").getDimensions();
-    auto frequency = file.getDataSet("/frequency")
-      .read<std::vector<std::vector<std::vector<double>>>>();
-    auto eigenvector_vector = file.getDataSet("/eigenvector")
-      .read<std::vector<std::vector<std::vector<std::vector<PhonopyComplex>>>>>();
-    auto path = file.getDataSet("/path")
-      .read<std::vector<std::vector<std::vector<double>>>>();
-    QPointData.resize(size[0] * size[1]);
-    for (unsigned i = 0; i < size[0]; i++)
-      for (unsigned j = 0; j < size[1]; j++)
+    unsigned num_qpoint = node["nqpoint"].as<int>();
+    unsigned num_band = node["nband"].as<int>();
+
+    std::ifstream ifs(*hdf5_file);
+    std::string line;
+    for (unsigned i = 0; i < num_qpoint; i++)
+    {
+      std::cerr << fmt::format("\rReading input file...({}/{})", i, num_qpoint) << std::flush;
+      // "phonon:" or ""
+      std::getline(ifs, line);
+      auto& qpoint_data = QPointData.emplace_back();
+      // "- q-position: [    0.4666662,    0.6000000,    0.0000000 ]"
+      std::getline(ifs, line);
+      for (unsigned j = 0; j < 3; j++)
+        qpoint_data.QPoint(j) = std::stod(line.substr(15 + j * 14, 13));
+      // "  distance:    0.0000000"
+      std::getline(ifs, line);
+      // "  band:"
+      std::getline(ifs, line);
+      for (unsigned j = 0; j < num_band; j++)
       {
-        QPointData[i * size[1] + j].QPoint = Eigen::Vector3d(path[i][j].data());
-        QPointData[i * size[1] + j].ModeData.resize(size[2]);
-        for (unsigned k = 0; k < size[2]; k++)
+        auto& mode_data = qpoint_data.ModeData.emplace_back();
+        // "  - # 1"
+        std::getline(ifs, line);
+        // "    frequency:   -0.0262361307"
+        std::getline(ifs, line);
+        mode_data.Frequency = std::stod(line.substr(14));
+        // "    eigenvector:"
+        std::getline(ifs, line);
+        Eigen::MatrixX3cd eigenvectors(AtomPosition.rows(), 3);
+        for (unsigned k = 0; k < AtomPosition.rows(); k++)
         {
-          QPointData[i * size[1] + j].ModeData[k].Frequency = frequency[i][j][k];
-          Eigen::MatrixX3cd eigenvectors(AtomPosition.rows(), 3);
-          for (unsigned l = 0; l < AtomPosition.rows(); l++)
-            for (unsigned m = 0; m < 3; m++)
-              eigenvectors(l, m)
-                = eigenvector_vector[i][j][k][l * 3 + m].r + eigenvector_vector[i][j][k][l * 3 + m].i * 1i;
-          QPointData[i * size[1] + j].ModeData[k].AtomMovement = eigenvectors / eigenvectors.norm();
+          // "    - # atom 1"
+          std::getline(ifs, line);
+          for (unsigned l = 0; l < 3; l++)
+          {
+            // "      - [  0.00000000521496,  0.00000000000000 ]"
+            std::getline(ifs, line);
+            eigenvectors(k, l) = std::stod(line.substr(9, 18))
+              + std::stod(line.substr(28, 18)) * 1i;
+          }
         }
+        mode_data.AtomMovement = eigenvectors / eigenvectors.norm();
       }
+    }
   }
   else
   {
