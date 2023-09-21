@@ -172,6 +172,7 @@ int main(int argc, const char** argv)
     std::osyncstream(std::cerr) << fmt::format("\rCalculating projection coefficient...({}/{})",
       finished_qpoint, input.QPointData.size()) << std::flush;
     std::vector<std::vector<double>> projection_coefficient(qpoint_data.ModeData.size());
+    // 这里, qpoint_data 和 projection_coefficient 均指对应于一个 q 点的数据
     for (unsigned i_of_mode = 0; i_of_mode < qpoint_data.ModeData.size(); i_of_mode++)
     {
       auto& _ = projection_coefficient[i_of_mode];
@@ -261,7 +262,7 @@ int main(int argc, const char** argv)
 
   // YAML 输出得太丑了，我来自己写
   std::cerr << "Writing output file..." << std::flush;
-  std::ofstream(argc > 3 ? argv[2] : argv[3]) << [&]
+  std::ofstream(argc > 3 ? argv[3] : argv[2]) << [&]
   {
     std::stringstream print;
     auto format = input.Debug.value_or(false) ? 10 : 3;
