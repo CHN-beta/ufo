@@ -219,14 +219,14 @@ int main(int argc, const char** argv)
       _.Source = input.QPointData[i_of_qpoint].QPoint;
       if (!input.Debug.value_or(false))
       {
-        // 从小到大枚举所有的模式，并将相近的模式（相差小于 0.01 THz）合并
+        // 从小到大枚举所有的模式，并将相近的模式（相差小于 0.1 THz）合并
         std::map<double, double> frequency_to_weight;
         for (unsigned i_of_mode = 0; i_of_mode < input.QPointData[i_of_qpoint].ModeData.size(); i_of_mode++)
         {
           auto frequency = input.QPointData[i_of_qpoint].ModeData[i_of_mode].Frequency;
           auto weight = projection_coefficient[i_of_qpoint][i_of_mode][i_of_sub_qpoint];
-          auto it_lower = frequency_to_weight.lower_bound(frequency - 0.01);
-          auto it_upper = frequency_to_weight.upper_bound(frequency + 0.01);
+          auto it_lower = frequency_to_weight.lower_bound(frequency - 0.1);
+          auto it_upper = frequency_to_weight.upper_bound(frequency + 0.1);
           if (it_lower == it_upper)
             frequency_to_weight[frequency] = weight;
           else
@@ -241,9 +241,9 @@ int main(int argc, const char** argv)
             frequency_to_weight[frequency_sum / weight_sum] = weight_sum;
           }
         }
-        // 仅保留权重大于 0.01 的模式
+        // 仅保留权重大于 0.1 的模式
         for (auto& mode : frequency_to_weight)
-          if (mode.second > 0.01)
+          if (mode.second > 0.1)
           {
             auto& __ = _.ModeData.emplace_back();
             __.Frequency = mode.first;
