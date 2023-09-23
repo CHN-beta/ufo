@@ -139,21 +139,21 @@ int main(int argc, const char** argv)
   std::vector<std::vector<Eigen::VectorXcd>> basis(input.SuperCellMultiplier.prod());
   // 每个 q 点对应的一组 sub qpoint。不同的 q 点所对应的 sub qpoint 是不一样的，但 sub qpoint 与 q 点的相对位置一致。
   // 这里 xyz_of_diff_of_sub_qpoint 即表示这个相对位置，单位为超胞的倒格矢
-  for (auto [xyz_of_diff_of_sub_qpoint_by_reciprocal_super_cell, i_of_diff_of_sub_qpoint]
+  for (auto [xyz_of_diff_of_sub_qpoint_by_reciprocal_modified_super_cell, i_of_sub_qpoint]
     : triplet_sequence(input.SuperCellMultiplier))
   {
-    basis[i_of_diff_of_sub_qpoint].resize(input.PrimativeCellBasisNumber.prod());
+    basis[i_of_sub_qpoint].resize(input.PrimativeCellBasisNumber.prod());
     for (auto [xyz_of_basis, i_of_basis] : triplet_sequence(input.PrimativeCellBasisNumber))
     {
       // 计算 q 点的坐标, 单位为单胞的倒格矢
       auto diff_of_sub_qpoint_by_reciprocal_primative_cell = xyz_of_basis.cast<double>()
         + input.SuperCellMultiplier.cast<double>().cwiseInverse().asDiagonal()
-        * xyz_of_diff_of_sub_qpoint_by_reciprocal_super_cell.cast<double>();
+        * xyz_of_diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>();
       // 将 q 点坐标转换为埃^-1
       auto qpoint = (diff_of_sub_qpoint_by_reciprocal_primative_cell.transpose()
         * (input.PrimativeCell.transpose().inverse())).transpose();
       // 计算基矢
-      basis[i_of_diff_of_sub_qpoint][i_of_basis]
+      basis[i_of_sub_qpoint][i_of_basis]
         = (2i * std::numbers::pi_v<double> * (input.AtomPosition * qpoint)).array().exp();
     }
   }
@@ -200,17 +200,71 @@ int main(int argc, const char** argv)
   std::cerr << "Filling output object..." << std::flush;
   Output output;
   for (unsigned i_of_qpoint = 0; i_of_qpoint < input.QPointData.size(); i_of_qpoint++)
-    for (auto [xyz_of_diff_of_sub_qpoint_by_reciprocal_super_cell, i_of_sub_qpoint]
+  {
+    // 当 SuperCellDeformation 不是单位矩阵时, input.QPointData[i_of_qpoint].QPoint 不一定在 reciprocal_primative_cell 中
+    // 需要首先将 q 点平移数个周期, 进入不包含 SuperCellDeformation 的超胞的倒格子中
+    auto qpoint_by_reciprocal_super_cell_in_modified_reciprocal_super_cell = [&]
+    {
+      auto current_qpoint = input.QPointData[i_of_qpoint].QPoint;
+      // 给一个 q 点打分
+      // 计算这个 q 点以 modified_reciprocal_supre_cell 为单位的坐标, 依次考虑每个维度, 总分为每个维度之和.
+      // 如果这个坐标大于 0 小于 1, 则打 0 分.
+      // 如果这个坐标小于 0, 则打这个坐标的相反数分.
+      // 如果这个坐标大于 1, 则打这个坐标减去 1 的分.
+      auto score = [&](Eigen::Vector3d qpoint_by_reciprocal_super_cell)
+      {
+        // SuperCell = SuperCellDeformation * SuperCellMultiplier.asDiagonal() * PrimativeCell
+        // ModifiedSuperCell = SuperCellMultiplier.asDiagonal() * PrimativeCell
+        // ReciprocalSuperCell = SuperCell.inverse().transpose()
+        // ReciprocalModifiedSuperCell = ModifiedSuperCell.inverse().transpose()
+        // qpoint.transpose() = qpoint_by_reciprocal_super_cell.transpose() * ReciprocalSuperCell
+        // qpoint.transpose() = qpoint_by_reciprocal_modified_super_cell.transpose() * ReciprocalModifiedSuperCell
+        auto qpoint_by_reciprocal_modified_super_cell =
+          (input.SuperCellDeformation.inverse() * qpoint_by_reciprocal_super_cell).eval();
+        double score = 0;
+        for (unsigned i = 0; i < 3; i++)
+        {
+          auto coordinate = qpoint_by_reciprocal_modified_super_cell[i];
+          if (coordinate < 0)
+            score -= coordinate;
+          else if (coordinate > 1)
+            score += coordinate - 1;
+        }
+        return score;
+      };
+      while (score(current_qpoint) > 0)
+      {
+        double min_score = std::numeric_limits<double>::max();
+        Eigen::Vector3d min_score_qpoint;
+        for (int x = -1; x <= 1; x++)
+          for (int y = -1; y <= 1; y++)
+            for (int z = -1; z <= 1; z++)
+            {
+              auto this_qpoint = (current_qpoint
+                + Eigen::Matrix<int, 3, 1>{{x}, {y}, {z}}.cast<double>()).eval();
+              auto this_score = score(this_qpoint);
+              if (this_score < min_score)
+              {
+                min_score = this_score;
+                min_score_qpoint = this_qpoint;
+              }
+            }
+      }
+      return current_qpoint;
+    }();
+    for (auto [xyz_of_diff_of_sub_qpoint_by_reciprocal_modified_super_cell, i_of_sub_qpoint]
       : triplet_sequence(input.SuperCellMultiplier))
     {
       auto& _ = output.QPointData.emplace_back();
-      auto reciprocal_super_cell =
-        (input.SuperCellDeformation * input.SuperCellMultiplier.cast<double>().asDiagonal() * input.PrimativeCell)
-        .inverse().transpose();
+      // 这一步推导过程在计算 score 的函数中
+      auto qpoint_by_reciprocal_modified_super_cell_in_modified_reciprocal_super_cell =
+        input.SuperCellDeformation.inverse() * qpoint_by_reciprocal_super_cell_in_modified_reciprocal_super_cell;
+      auto reciprocal_modified_super_cell =
+        (input.SuperCellMultiplier.cast<double>().asDiagonal() * input.PrimativeCell).inverse().transpose();
       // sub qpoint 的坐标，单位为埃^-1
-      auto sub_qpoint =
-        ((xyz_of_diff_of_sub_qpoint_by_reciprocal_super_cell.cast<double>() + input.QPointData[i_of_qpoint].QPoint)
-        .transpose() * reciprocal_super_cell).transpose();
+      auto sub_qpoint = ((xyz_of_diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>()
+        + qpoint_by_reciprocal_modified_super_cell_in_modified_reciprocal_super_cell)
+        .transpose() * reciprocal_modified_super_cell).transpose();
       // 将坐标转换为相对于单胞的倒格矢的坐标并写入
       // 由 sub_qpoint.transpose() = sub_qpoint_by_reciprocal_primative_cell.transpose()
       //  * PrimativeCell.transpose().inverse()
@@ -258,6 +312,7 @@ int main(int argc, const char** argv)
           __.Weight = projection_coefficient[i_of_qpoint][i_of_mode][i_of_sub_qpoint];
         }
     }
+  }
   std::cerr << "Done." << std::endl;
 
   // YAML 输出得太丑了，我来自己写

@@ -24,6 +24,12 @@ struct Output
   std::vector<QPointDataType_> QPointData;
 };
 
+std::vector<Eigen::Matrix2xd QPointPath
+{
+  {}
+};
+
+
 int main()
 {
   YAML::Node root = YAML::LoadFile("out.yaml");
