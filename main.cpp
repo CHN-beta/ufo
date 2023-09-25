@@ -13,7 +13,6 @@
 # include <concurrencpp/concurrencpp.h>
 # include <fmt/format.h>
 # include <highfive/H5File.hpp>
-// # include <highfive/H5Easy.hpp>
 
 using namespace std::literals;
 
@@ -49,8 +48,10 @@ struct Input
   // 超胞中原子的坐标，每行表示一个原子的坐标，单位为埃
   Eigen::MatrixX3d AtomPosition;
 
-  // 如果打开调试，就不会合并相近的模式，不过滤权重过小的模式，也不会限制浮点的精度
-  std::optional<bool> Debug;
+  // 是否调整输出结果, 使得结果中的模式适合人类阅读. 默认为 true.
+  // 这包括合并相近的模式, 去除权重过小的模式, 限制输出的小数位数.
+  // 如果想用结果来进一步画图, 则建议关闭.
+  std::optional<bool> Filter;
 
   // 关于各个 Q 点的数据
   struct QPointDataType_
@@ -249,6 +250,7 @@ int main(int argc, const char** argv)
                 min_score_qpoint = this_qpoint;
               }
             }
+        current_qpoint = min_score_qpoint;
       }
       return current_qpoint;
     }();
@@ -271,7 +273,7 @@ int main(int argc, const char** argv)
       // 得到 sub_qpoint_by_reciprocal_primative_cell = PrimativeCell * sub_qpoint
       _.QPoint = input.PrimativeCell * sub_qpoint;
       _.Source = input.QPointData[i_of_qpoint].QPoint;
-      if (!input.Debug.value_or(false))
+      if (input.Filter.value_or(true))
       {
         // 从小到大枚举所有的模式，并将相近的模式（相差小于 0.1 THz）合并
         std::map<double, double> frequency_to_weight;
@@ -320,7 +322,7 @@ int main(int argc, const char** argv)
   std::ofstream(argc > 3 ? argv[3] : argv[2]) << [&]
   {
     std::stringstream print;
-    auto format = input.Debug.value_or(false) ? 10 : 3;
+    auto format = input.Filter.value_or(true) ? 3 : 10;
     print << "QPointData:\n";
     for (auto& qpoint: output.QPointData)
     {
@@ -364,8 +366,8 @@ Input::Input(std::string yaml_file, std::optional<std::string> hdf5_file)
   for (unsigned i = 0; i < 3; i++)
     PrimativeCellBasisNumber(i) = node["PrimativeCellBasisNumber"][i].as<int>();
 
-  if (auto value = node["Debug"])
-    Debug = value.as<bool>();
+  if (auto value = node["Filter"])
+    Filter = value.as<bool>();
 
   auto points = node["points"].as<std::vector<YAML::Node>>();
   auto atom_position_to_super_cell = Eigen::MatrixX3d(points.size(), 3);
