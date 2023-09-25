@@ -400,7 +400,7 @@ Input::Input(std::string yaml_file, std::optional<std::string> hdf5_file)
           for (unsigned l = 0; l < AtomPosition.rows(); l++)
             for (unsigned m = 0; m < 3; m++)
               eigenvectors(l, m)
-                = eigenvector_vector[i][j][k][l * 3 + m].r + eigenvector_vector[i][j][k][l * 3 + m].i * 1i;
+                = eigenvector_vector[i][j][l * 3 + m][k].r + eigenvector_vector[i][j][l * 3 + m][k].i * 1i;
           QPointData[i * size[1] + j].ModeData[k].AtomMovement = eigenvectors / eigenvectors.norm();
         }
       }
