@@ -8,7 +8,7 @@
       buildInputs = with pkgs;
       [
         yaml-cpp eigen fmt (localPackages.concurrencpp.override { stdenv = genericPackages.gcc13Stdenv; }) highfive
-        hdf5.dev tbb
+        hdf5.dev tbb (localPackages.matplotplusplus.override { stdenv = genericPackages.gcc13Stdenv; })
       ];
       hardeningDisable = [ "all" ];
     };
