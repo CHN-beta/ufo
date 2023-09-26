@@ -807,11 +807,11 @@
         "touchix": "touchix"
       },
       "locked": {
-        "lastModified": 1695648380,
-        "narHash": "sha256-8zQct7OdcAtzwsvyPy07wImEtO6v0Rz//grrDtol+Jo=",
+        "lastModified": 1695703232,
+        "narHash": "sha256-JqKKV5Zh3r4SAmK1Y0WdZaN5chRuaWRxw5hv9YPCRlQ=",
         "owner": "CHN-beta",
         "repo": "nixos",
-        "rev": "e21c7a916a66de6894c3e785a3a0d5f621458272",
+        "rev": "6318b938c2b3742874982d5d1a338656a50e493b",
         "type": "github"
       },
       "original": {
