@@ -807,11 +807,11 @@
         "touchix": "touchix"
       },
       "locked": {
-        "lastModified": 1695465859,
-        "narHash": "sha256-nauD552M00PmcpDkKqoYC0ql8QFaFyfKpIYm2qyRKEQ=",
+        "lastModified": 1695648380,
+        "narHash": "sha256-8zQct7OdcAtzwsvyPy07wImEtO6v0Rz//grrDtol+Jo=",
         "owner": "CHN-beta",
         "repo": "nixos",
-        "rev": "ad7be5bc2b22a47baf34eebb913b93c11482fb37",
+        "rev": "e21c7a916a66de6894c3e785a3a0d5f621458272",
         "type": "github"
       },
       "original": {
@@ -951,11 +951,11 @@
     },
     "nixpkgs-unstable": {
       "locked": {
-        "lastModified": 1695275987,
-        "narHash": "sha256-DjfwcdkKY7Hom5Nk8fR2fJInRf93uyeAvX+GoA1rqKo=",
+        "lastModified": 1695562663,
+        "narHash": "sha256-cnPZFTKQGldgFHWC9LHt8mDtJVTmj4WJxvKHF5uw5qA=",
         "owner": "CHN-beta",
         "repo": "nixpkgs",
-        "rev": "1523dd436e6f9baf1ab789131b4394b3502de789",
+        "rev": "82e02a1546fc59bc496f859e446ddcd412f09849",
         "type": "github"
       },
       "original": {
@@ -1009,6 +1009,22 @@
       "original": {
         "owner": "CHN-beta",
         "ref": "nixos-23.05",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_5": {
+      "locked": {
+        "lastModified": 1695360818,
+        "narHash": "sha256-JlkN3R/SSoMTa+CasbxS1gq+GpGxXQlNZRUh9+LIy/0=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "e35dcc04a3853da485a396bdd332217d0ac9054f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -1143,7 +1159,8 @@
     },
     "root": {
       "inputs": {
-        "nixos": "nixos"
+        "nixos": "nixos",
+        "nixpkgs": "nixpkgs_5"
       }
     },
     "sops-nix": {
