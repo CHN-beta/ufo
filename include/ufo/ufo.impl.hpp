@@ -193,9 +193,18 @@ inline void Output::write(std::string filename, std::string format, unsigned per
   else if (format == "zpp")
   {
     auto [data, out] = zpp::bits::data_out();
+    out(*this).or_throw();
     std::basic_ofstream<std::byte>(filename, std::ios::binary)
       << std::basic_string_view{data.data(), data.size()};
   }
+}
+
+inline Output::Output(std::string filename)
+{
+  auto [data, in] = zpp::bits::data_in();
+  auto input = std::basic_ifstream<std::byte>(filename, std::ios::binary);
+  data.assign(std::istreambuf_iterator<std::byte>(input), {});
+  in(*this).or_throw();
 }
 
 inline concurrencpp::generator<std::pair<Eigen::Vector<unsigned, 3>, unsigned>>

@@ -2,6 +2,7 @@
 # include <zpp_bits.h>
 # include <span>
 # include <iostream>
+# include <vector>
 
 namespace Eigen
 {
@@ -18,9 +19,9 @@ namespace Eigen
 int main()
 {
   auto [data, in, out] = zpp::bits::data_in_out();
-  Eigen::Matrix3d PrimativeCell = Eigen::Matrix3d::Identity();
-  out(PrimativeCell);
-  Eigen::Matrix3d PrimativeCell2;
-  in(PrimativeCell2);
-  std::cout << PrimativeCell2 << std::endl;
+  std::vector<Eigen::Matrix3d> PrimativeCell = { Eigen::Matrix3d::Identity() };
+  out(PrimativeCell).or_throw();
+  std::vector<Eigen::Matrix3d> PrimativeCell2;
+  in(PrimativeCell2).or_throw();
+  std::cout << PrimativeCell2[0] << std::endl;
 }
