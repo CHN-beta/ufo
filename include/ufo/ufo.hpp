@@ -29,7 +29,9 @@ HIGHFIVE_REGISTER_TYPE(PhonopyComplex, create_compound_complex)
 namespace Eigen
 {
   constexpr inline auto serialize(auto & archive, Eigen::Matrix3d& matrix)
-    { return archive(std::span<double, 9>(matrix.data(), 9)); }
+    { return archive(std::span(matrix.data(), matrix.size())); }
+  constexpr inline auto serialize(auto & archive, Eigen::Vector3d& vector)
+    { return archive(std::span(vector.data(), vector.size())); }
 }
 
 // 在相位中, 约定为使用 $\exp (2 \pi i \vec{q} \cdot \vec{r})$ 来表示原子的运动状态
@@ -56,6 +58,19 @@ struct Input
   std::optional<Eigen::Matrix<double, 3, 3>> SuperCellDeformation;
   // 在单胞内取几个平面波的基矢
   Eigen::Vector<unsigned, 3> PrimativeCellBasisNumber;
+
+  struct InputOutputFile_
+  {
+    std::string FileName;
+    std::string Format;
+    std::map<std::string, std::any> ExtraParameters;
+  };
+
+  // 从哪个文件读入 AtomPosition, 以及这个文件的格式, 格式可选值包括 "yaml"
+  InputOutputFile_ AtomPositionInputFile;
+  // 从哪个文件读入 QPointData, 以及这个文件的格式, 格式可选值包括 "yaml" 和 "hdf5"
+  InputOutputFile_ QPointDataInputFile;
+
   // 超胞中原子的坐标，每行表示一个原子的坐标，单位为埃
   Eigen::MatrixX3d AtomPosition;
   // 关于各个 Q 点的数据
@@ -78,18 +93,6 @@ struct Input
     std::vector<ModeDataType_> ModeData;
   };
   std::vector<QPointDataType_> QPointData;
-
-  struct InputOutputFile_
-  {
-    std::string FileName;
-    std::string Format;
-    std::map<std::string, std::any> ExtraParameters;
-  };
-
-  // 从哪个文件读入 AtomPosition, 以及这个文件的格式, 格式可选值包括 "yaml"
-  InputOutputFile_ AtomPositionInputFile;
-  // 从哪个文件读入 QPointData, 以及这个文件的格式, 格式可选值包括 "yaml" 和 "hdf5"
-  InputOutputFile_ QPointDataInputFile;
 
   // 输出到哪些文件, 以及使用怎样的格式, 格式可选值包括:
   // yaml: 使用 yaml 格式输出
@@ -138,6 +141,8 @@ struct Output
   void write(std::string filename, std::string format, unsigned percision = 10);
   Output() = default;
   Output(std::string filename);
+
+  using serialize = zpp::bits::members<1>;
 };
 
 concurrencpp::generator<std::pair<Eigen::Vector<unsigned, 3>, unsigned>>

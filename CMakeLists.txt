@@ -27,6 +27,11 @@ target_include_directories(ufo PRIVATE ${PROJECT_SOURCE_DIR}/include ${ZPP_BITS_
 target_link_libraries(ufo PRIVATE
   yaml-cpp Eigen3::Eigen fmt::fmt concurrencpp::concurrencpp HighFive_HighFive TBB::tbb Matplot++::matplot)
 
+add_executable(plot src/plot.cpp)
+target_include_directories(plot PRIVATE ${PROJECT_SOURCE_DIR}/include ${ZPP_BITS_INCLUDE_DIR})
+target_link_libraries(plot PRIVATE
+  yaml-cpp Eigen3::Eigen fmt::fmt concurrencpp::concurrencpp HighFive_HighFive TBB::tbb Matplot++::matplot)
+
 get_property(ImportedTargets DIRECTORY "${CMAKE_SOURCE_DIR}" PROPERTY IMPORTED_TARGETS)
 message("Imported targets: ${ImportedTargets}")
 message("List of compile features: ${CMAKE_CXX_COMPILE_FEATURES}")
