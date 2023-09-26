@@ -5,5 +5,5 @@ main
 plot
 out.yaml
 .ccls-cache
-.xmake/
+.cache
 build/
