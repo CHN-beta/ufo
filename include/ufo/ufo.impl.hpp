@@ -3,7 +3,6 @@
 inline HighFive::CompoundType create_compound_complex()
   { return {{"r", HighFive::AtomicType<double>{}}, {"i", HighFive::AtomicType<double>{}}}; }
 
-
 inline Input::Input(std::string filename)
 {
   // read main input file
@@ -21,7 +20,7 @@ inline Input::Input(std::string filename)
       SuperCellDeformation.emplace();
       for (unsigned i = 0; i < 3; i++)
         for (unsigned j = 0; j < 3; j++)
-          (*SuperCellDeformation)(i, j) = node["SuperCellDeformation"][i][j].as<double>();
+          (*SuperCellDeformation)(i, j) = value[i][j].as<double>();
     }
 
     for (unsigned i = 0; i < 3; i++)
@@ -45,9 +44,9 @@ inline Input::Input(std::string filename)
         auto& _ = QPointDataOutputFile.emplace_back();
         _.FileName = value[i]["FileName"].as<std::string>();
         _.Format = value[i]["Format"].as<std::string>();
-        if (!std::set<std::string>{"yaml", "hdf5"}.contains(_.Format))
+        if (!std::set<std::string>{"yaml", "yaml-human-readable", "zpp"}.contains(_.Format))
           throw std::runtime_error(fmt::format
-            ("Unknown format: {}, should be \"yaml\" or \"hdf5\".", _.Format));
+            ("Unknown format: {}, should be \"yaml\", \"yaml-human-readable\" or \"zpp\".", _.Format));
       }
   }
 

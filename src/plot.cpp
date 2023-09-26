@@ -1,13 +1,4 @@
-# include <iostream>
-# include <array>
-# include <numbers>
-# include <numeric>
-# include <fstream>
-# include <eigen3/Eigen/Dense>
-# include <yaml-cpp/yaml.h>
-# include <matplot/matplot.h>
-
-using namespace std::literals;
+# include <ufo/ufo.impl.hpp>
 
 // 一个临时的程序, 用于将数据导出画图
 

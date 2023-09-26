@@ -13,7 +13,7 @@
 # include <vector>
 # include <span>
 # include <yaml-cpp/yaml.h>
-# include <eigen3/Eigen/Dense>
+# include <Eigen/Dense>
 # include <concurrencpp/concurrencpp.h>
 # include <fmt/format.h>
 # include <fmt/std.h>
@@ -136,6 +136,8 @@ struct Output
   std::vector<QPointDataType_> QPointData;
 
   void write(std::string filename, std::string format, unsigned percision = 10);
+  Output() = default;
+  Output(std::string filename);
 };
 
 concurrencpp::generator<std::pair<Eigen::Vector<unsigned, 3>, unsigned>>
