@@ -227,15 +227,19 @@ inline void Output::write(std::string filename, std::string format, unsigned per
   {
     auto [data, out] = zpp::bits::data_out();
     out(*this).or_throw();
-    std::basic_ofstream<std::byte>(filename, std::ios::binary)
-      << std::basic_string_view{data.data(), data.size()};
+    static_assert(sizeof(char) == sizeof(std::byte));
+    std::ofstream file(filename, std::ios::binary | std::ios::out);
+    file.exceptions(std::ios::badbit | std::ios::failbit);
+    file.write(reinterpret_cast<char*>(data.data()), data.size());
   }
 }
 
 inline Output::Output(std::string filename)
 {
   auto [data, in] = zpp::bits::data_in();
-  auto input = std::basic_ifstream<std::byte>(filename, std::ios::binary);
+  auto input = std::basic_ifstream<std::byte>
+    (filename, std::ios::binary | std::ios::in);
+  input.exceptions(std::ios::badbit | std::ios::failbit);
   data.assign(std::istreambuf_iterator<std::byte>(input), {});
   in(*this).or_throw();
 }
