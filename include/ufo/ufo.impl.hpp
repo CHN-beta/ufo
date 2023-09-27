@@ -86,7 +86,11 @@ inline Input::Input(std::string filename)
   if (AtomPositionInputFile.Format == "yaml")
   {
     auto node = YAML::LoadFile(AtomPositionInputFile.FileName);
-    auto points = node["points"].as<std::vector<YAML::Node>>();
+    std::vector<YAML::Node> points;
+    if (auto _ = node["points"])
+      points = _.as<std::vector<YAML::Node>>();
+    else
+      points = node["unit_cell"]["points"].as<std::vector<YAML::Node>>();
     auto atom_position_to_super_cell = Eigen::MatrixX3d(points.size(), 3);
     for (unsigned i = 0; i < points.size(); i++)
       for (unsigned j = 0; j < 3; j++)
