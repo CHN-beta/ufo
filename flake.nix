@@ -4,12 +4,12 @@
 
   outputs = inputs:
     let
-      pkgs = inputs.nixpkgs.legacyPackages.x86_64-linux;
-      # pkgs =  import inputs.nixpkgs
-      # {
-      #   localSystem = { system = "x86_64-linux"; gcc = { arch = "alderlake"; tune = "alderlake"; }; };
-      #   config.allowUnfree = true;
-      # };
+      # pkgs = inputs.nixpkgs.legacyPackages.x86_64-linux;
+      pkgs = import inputs.nixpkgs
+      {
+        localSystem = { system = "x86_64-linux"; gcc = { arch = "alderlake"; tune = "alderlake"; }; };
+        config.allowUnfree = true;
+      };
       localPackages = import "${inputs.nixos}/local/pkgs" { inherit pkgs; inherit (inputs.nixpkgs) lib; };
     in
     {

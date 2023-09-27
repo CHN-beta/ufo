@@ -7,10 +7,10 @@ inline Input::Input(std::string filename)
 {
   // read main input file
   {
-  auto node = YAML::LoadFile(filename);
-    for (unsigned i = 0; i < 3; i++)
-      for (unsigned j = 0; j < 3; j++)
-        PrimativeCell(i, j) = node["PrimativeCell"][i][j].as<double>();
+    auto node = YAML::LoadFile(filename);
+      for (unsigned i = 0; i < 3; i++)
+        for (unsigned j = 0; j < 3; j++)
+          PrimativeCell(i, j) = node["PrimativeCell"][i][j].as<double>();
 
     for (unsigned i = 0; i < 3; i++)
       SuperCellMultiplier(i) = node["SuperCellMultiplier"][i].as<int>();
@@ -26,28 +26,61 @@ inline Input::Input(std::string filename)
     for (unsigned i = 0; i < 3; i++)
       PrimativeCellBasisNumber(i) = node["PrimativeCellBasisNumber"][i].as<int>();
 
-    AtomPositionInputFile.FileName = node["AtomPositionInputFile"]["FileName"].as<std::string>();
-    AtomPositionInputFile.Format = node["AtomPositionInputFile"]["Format"].as<std::string>();
+    auto read_file_config = [filename](YAML::Node source, InputOutputFile_& config)
+    {
+      if (auto _ = source["SameAsConfigFile"])
+      {
+        auto __ = _.as<bool>();
+        config.ExtraParameters["SameAsConfigFile"] = __;
+        if (__)
+        {
+          config.FileName = filename;
+          config.Format = "yaml";
+          return;
+        }
+      }
+      config.FileName = source["FileName"].as<std::string>();
+      config.Format = source["Format"].as<std::string>();
+      if (auto _ = source["RelativeToConfigFile"])
+      {
+        auto __ = _.as<bool>();
+        config.ExtraParameters["RelativeToConfigFile"] = __;
+        if (__)
+          config.FileName = std::filesystem::path(filename).parent_path() / config.FileName;
+      }
+    };
+    read_file_config(node["AtomPositionInputFile"], AtomPositionInputFile);
     if (!std::set<std::string>{"yaml"}.contains(AtomPositionInputFile.Format))
       throw std::runtime_error(fmt::format
-        ("Unknown format: {}, should be \"yaml\".", AtomPositionInputFile.Format));
-
-    QPointDataInputFile.FileName = node["QPointDataInputFile"]["FileName"].as<std::string>();
-    QPointDataInputFile.Format = node["QPointDataInputFile"]["Format"].as<std::string>();
+        ("Unknown AtomPositionInputFile.Format: {}, should be \"yaml\".", AtomPositionInputFile.Format));
+    read_file_config(node["QPointDataInputFile"], QPointDataInputFile);
     if (!std::set<std::string>{"yaml", "hdf5"}.contains(QPointDataInputFile.Format))
       throw std::runtime_error(fmt::format
-        ("Unknown format: {}, should be \"yaml\" or \"hdf5\".", QPointDataInputFile.Format));
-
+        ("Unknown QPointDataInputFile.Format: {}, should be \"yaml\" or \"hdf5\".", QPointDataInputFile.Format));
     if (auto value = node["QPointDataOutputFile"])
+    {
+      QPointDataOutputFile.resize(value.size());
       for (unsigned i = 0; i < value.size(); i++)
       {
-        auto& _ = QPointDataOutputFile.emplace_back();
-        _.FileName = value[i]["FileName"].as<std::string>();
-        _.Format = value[i]["Format"].as<std::string>();
-        if (!std::set<std::string>{"yaml", "yaml-human-readable", "zpp"}.contains(_.Format))
+        read_file_config(value[i], QPointDataOutputFile[i]);
+        if
+        (
+          QPointDataOutputFile[i].ExtraParameters.contains("SameAsConfigFile")
+          && std::any_cast<bool>(QPointDataOutputFile[i].ExtraParameters["SameAsConfigFile"])
+        )
+          throw std::runtime_error("QPointDataOutputFile.SameAsConfigFile should not be set.");
+        if
+        (
+          !std::set<std::string>{"yaml", "yaml-human-readable", "zpp"}
+            .contains(QPointDataOutputFile[i].Format)
+        )
           throw std::runtime_error(fmt::format
-            ("Unknown format: {}, should be \"yaml\", \"yaml-human-readable\" or \"zpp\".", _.Format));
+          (
+            "Unknown QPointDataOutputFile[{}].Format: {}, should be \"yaml\", \"yaml-human-readable\" or \"zpp\".",
+            i, QPointDataOutputFile[i].Format
+          ));
       }
+    }
   }
 
   if (AtomPositionInputFile.Format == "yaml")

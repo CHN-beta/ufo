@@ -90,7 +90,7 @@ int main(int argc, const char** argv)
   {
     // 当 SuperCellDeformation 不是单位矩阵时, input.QPointData[i_of_qpoint].QPoint 不一定在 reciprocal_primative_cell 中
     // 需要首先将 q 点平移数个周期, 进入不包含 SuperCellDeformation 的超胞的倒格子中
-    auto qpoint_by_reciprocal_super_cell_in_modified_reciprocal_super_cell
+    auto qpoint_by_reciprocal_modified_super_cell_in_modified_reciprocal_super_cell
       = !input.SuperCellDeformation ? input.QPointData[i_of_qpoint].QPoint : [&]
       {
         auto current_qpoint = input.QPointData[i_of_qpoint].QPoint;
@@ -139,16 +139,12 @@ int main(int argc, const char** argv)
               }
           current_qpoint = min_score_qpoint;
         }
-        return current_qpoint;
+        return input.SuperCellDeformation->inverse() * current_qpoint;
       }();
     for (auto [xyz_of_diff_of_sub_qpoint_by_reciprocal_modified_super_cell, i_of_sub_qpoint]
       : triplet_sequence(input.SuperCellMultiplier))
     {
       auto& _ = output.QPointData.emplace_back();
-      // 这一步推导过程在计算 score 的函数中
-      auto qpoint_by_reciprocal_modified_super_cell_in_modified_reciprocal_super_cell =
-        input.SuperCellDeformation.value_or(Eigen::Matrix3d::Identity()).inverse()
-        * qpoint_by_reciprocal_super_cell_in_modified_reciprocal_super_cell;
       auto reciprocal_modified_super_cell =
         (input.SuperCellMultiplier.cast<double>().asDiagonal() * input.PrimativeCell).inverse().transpose();
       // sub qpoint 的坐标，单位为埃^-1
