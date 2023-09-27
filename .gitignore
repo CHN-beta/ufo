@@ -1,9 +1,10 @@
 .vscode
 .direnv
-test/*
 main
 plot
 out.yaml
 .ccls-cache
 .cache
 build/
+test/*
+!test/14.2.2.yaml
