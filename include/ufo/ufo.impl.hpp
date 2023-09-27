@@ -211,18 +211,18 @@ inline void Output::write(std::string filename, std::string format, unsigned per
             frequency_to_weight.erase(it_lower, it_upper);
             frequency_to_weight[frequency_sum / weight_sum] = weight_sum;
           }
-          auto& _ = output.QPointData.emplace_back();
-          _.QPoint = qpoint->QPoint;
-          _.Source = qpoint->Source;
-          _.SourceIndex_ = qpoint->SourceIndex_;
-          for (auto [frequency, weight] : frequency_to_weight)
-            if (weight > 0.1)
-            {
-              auto& __ = _.ModeData.emplace_back();
-              __.Frequency = frequency;
-              __.Weight = weight;
-            }
         }
+        auto& _ = output.QPointData.emplace_back();
+        _.QPoint = qpoint->QPoint;
+        _.Source = qpoint->Source;
+        _.SourceIndex_ = qpoint->SourceIndex_;
+        for (auto [frequency, weight] : frequency_to_weight)
+          if (weight > 0.1)
+          {
+            auto& __ = _.ModeData.emplace_back();
+            __.Frequency = frequency;
+            __.Weight = weight;
+          }
       }
     output.write(filename, "yaml", 3);
   }

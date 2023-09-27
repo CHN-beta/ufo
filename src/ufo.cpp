@@ -7,7 +7,7 @@ int main(int argc, const char** argv)
 
   std::cerr << "Reading input file..." << std::flush;
   Input input(argv[1]);
-  std::cerr << "Done." << std::endl;
+  std::cerr << " Done." << std::endl;
 
   // 反折叠的原理: 将超胞中的原子运动状态, 投影到一组平面波构成的基矢中.
   // 每一个平面波的波矢由两部分相加得到: 一部分是单胞倒格子的整数倍, 所取的个数有一定任意性, 论文中建议取大约单胞中原子个数那么多个;
@@ -56,7 +56,7 @@ int main(int argc, const char** argv)
     std::execution::par, input.QPointData.begin(), input.QPointData.end(),
     projection_coefficient.begin(), [&](const auto& qpoint_data)
   {
-    std::osyncstream(std::cerr) << fmt::format("\rCalculating projection coefficient...({}/{})",
+    std::osyncstream(std::cerr) << fmt::format("\rCalculating projection coefficient... ({}/{})",
       finished_qpoint, input.QPointData.size()) << std::flush;
     std::vector<std::vector<double>> projection_coefficient(qpoint_data.ModeData.size());
     // 这里, qpoint_data 和 projection_coefficient 均指对应于一个 q 点的数据
@@ -81,7 +81,7 @@ int main(int argc, const char** argv)
       finished_qpoint, input.QPointData.size()) << std::flush;
     return projection_coefficient;
   });
-  std::cerr << "Done." << std::endl;
+  std::cerr << " Done." << std::endl;
 
   // 填充输出对象
   std::cerr << "Filling output object..." << std::flush;
@@ -166,10 +166,10 @@ int main(int argc, const char** argv)
       }
     }
   }
-  std::cerr << "Done." << std::endl;
+  std::cerr << " Done." << std::endl;
 
   std::cerr << "Writing output file..." << std::flush;
   for (auto& output_file : input.QPointDataOutputFile)
     output.write(output_file.FileName, output_file.Format);
-  std::cerr << "Done." << std::endl;
+  std::cerr << " Done." << std::endl;
 }
