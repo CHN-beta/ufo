@@ -7,6 +7,6 @@ PrimativeCellBasisNumber: [ 8, 8, 8 ]
 AtomPositionInputFile: { FileName: "/home/chn/Documents/lammps-SiC/14/14.2/14.2.2/14.2.2.4/band.yaml", Format: "yaml" }
 QPointDataInputFile: { FileName: "/home/chn/Documents/lammps-SiC/14/14.2/14.2.2/14.2.2.4/band.yaml", Format: "yaml" }
 QPointDataOutputFile:
-- { FileName: "test/14.2.2.result.yaml", Format: "yaml-human-readable" }
+- { FileName: "test/14.2.2.result.yaml", Format: "yaml" }
 - { FileName: "test/14.2.2.result.human-readable.yaml", Format: "yaml-human-readable" }
 - { FileName: "test/14.2.2.result.zpp", Format: "zpp" }

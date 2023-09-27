@@ -102,7 +102,6 @@ inline Input::Input(std::string filename)
     QPointData.resize(phonon.size());
     for (unsigned i = 0; i < phonon.size(); i++)
     {
-      QPointData[i].QPoint.resize(3);
       for (unsigned j = 0; j < 3; j++)
         QPointData[i].QPoint(j) = phonon[i]["q-position"][j].as<double>();
       auto band = phonon[i]["band"].as<std::vector<YAML::Node>>();
@@ -158,7 +157,7 @@ inline Input::Input(std::string filename)
   }
 }
 
-inline void Output::write(std::string filename, std::string format, unsigned percision)
+inline void Output::write(std::string filename, std::string format, unsigned percision) const
 {
   if (format == "yaml")
     std::ofstream(filename) << [&]
@@ -230,7 +229,7 @@ inline void Output::write(std::string filename, std::string format, unsigned per
     static_assert(sizeof(char) == sizeof(std::byte));
     std::ofstream file(filename, std::ios::binary | std::ios::out);
     file.exceptions(std::ios::badbit | std::ios::failbit);
-    file.write(reinterpret_cast<char*>(data.data()), data.size());
+    file.write(reinterpret_cast<const char*>(data.data()), data.size());
   }
 }
 
