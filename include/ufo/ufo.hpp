@@ -30,7 +30,11 @@ namespace Eigen
 {
   constexpr inline auto serialize(auto & archive, Eigen::Matrix3d& matrix)
     { return archive(std::span(matrix.data(), matrix.size())); }
+  constexpr inline auto serialize(auto & archive, const Eigen::Matrix3d& matrix)
+    { return archive(std::span(matrix.data(), matrix.size())); }
   constexpr inline auto serialize(auto & archive, Eigen::Vector3d& vector)
+    { return archive(std::span(vector.data(), vector.size())); }
+  constexpr inline auto serialize(auto & archive, const Eigen::Vector3d& vector)
     { return archive(std::span(vector.data(), vector.size())); }
 }
 
@@ -138,7 +142,7 @@ struct Output
   };
   std::vector<QPointDataType_> QPointData;
 
-  void write(std::string filename, std::string format, unsigned percision = 10);
+  void write(std::string filename, std::string format, unsigned percision = 10) const;
   Output() = default;
   Output(std::string filename);
 
