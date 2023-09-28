@@ -17,8 +17,10 @@
 # include <concurrencpp/concurrencpp.h>
 # include <fmt/format.h>
 # include <fmt/std.h>
+# include <fmt/ranges.h>
 # include <highfive/H5File.hpp>
 # include <zpp_bits.h>
+# include <matplot/matplot.h>
 
 using namespace std::literals;
 

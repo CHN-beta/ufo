@@ -239,11 +239,18 @@ inline void Output::write(std::string filename, std::string format, unsigned per
 
 inline Output::Output(std::string filename)
 {
-  auto [data, in] = zpp::bits::data_in();
-  auto input = std::basic_ifstream<std::byte>
-    (filename, std::ios::binary | std::ios::in);
+  auto input = std::ifstream(filename, std::ios::binary | std::ios::in);
   input.exceptions(std::ios::badbit | std::ios::failbit);
-  data.assign(std::istreambuf_iterator<std::byte>(input), {});
+  std::vector<std::byte> data;
+  {
+    std::vector<char> string(std::istreambuf_iterator<char>(input), {});
+    data.assign
+    (
+      reinterpret_cast<std::byte*>(string.data()),
+      reinterpret_cast<std::byte*>(string.data() + string.size())
+    );
+  }
+  auto in = zpp::bits::in(data);
   in(*this).or_throw();
 }
 

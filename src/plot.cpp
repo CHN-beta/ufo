@@ -90,25 +90,48 @@ int main(int argc, char** argv)
     auto current_distance = i * total_distance / 1024;
     auto& _ = interpolated_points.emplace_back();
     _.Distance = current_distance;
+    auto it = std::lower_bound(Points.begin(), Points.end(), current_distance,
+      [](const Point& a, double b) { return a.Distance < b; });
     // 如果是开头或者结尾, 直接赋值, 否则插值
-    if (current_distance < Points.front().Distance)
+    if (it == Points.begin())
     {
       _.Frequency = Points.front().Frequency;
       _.Weight = Points.front().Weight;
     }
-    else if (current_distance > Points.back().Distance)
+    else if (it == Points.end() - 1)
     {
       _.Frequency = Points.back().Frequency;
       _.Weight = Points.back().Weight;
     }
     else
     {
-      auto it = std::lower_bound(Points.begin(), Points.end(), current_distance,
-          [](const Point& a, double b) { return a.Distance < b; });
       _.Frequency = (it->Frequency * (it->Distance - current_distance)
         + (it - 1)->Frequency * (current_distance - (it - 1)->Distance)) / (it->Distance - (it - 1)->Distance);
       _.Weight = (it->Weight * (it->Distance - current_distance)
         + (it - 1)->Weight * (current_distance - (it - 1)->Distance)) / (it->Distance - (it - 1)->Distance);
     }
   }
+
+  // 将结果对应到像素上的值
+  std::vector<std::vector<double>> weight(400, std::vector<double>(1024, 0));
+  for (auto& point : interpolated_points)
+  {
+    int x = point.Distance / total_distance * 1024;
+    if (x < 0)
+      x = 0;
+    else if (x >= 1024)
+      x = 1023;
+    for (unsigned i = 0; i < point.Frequency.size(); i++)
+    {
+      auto y = (point.Frequency(i) + 5) * 10;
+      if (y < 0)
+        y = 0;
+      else if (y >= 400)
+        y = 399;
+      weight[y][x] += point.Weight(i);
+    }
+  }
+
+  matplot::image(weight);
+  matplot::show();
 }

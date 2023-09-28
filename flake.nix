@@ -16,12 +16,9 @@
       devShell.x86_64-linux = pkgs.mkShell.override { stdenv = pkgs.gcc13Stdenv; }
       {
         packages = with pkgs; [ pkg-config cmake ninja ];
-        buildInputs = with pkgs;
-        [
-          yaml-cpp eigen fmt localPackages.concurrencpp highfive tbb_2021_8.dev localPackages.matplotplusplus
-          localPackages.zpp-bits
-        ];
-        hardeningDisable = [ "all" ];
+        buildInputs = (with pkgs; [ eigen yaml-cpp fmt highfive tbb_2021_8.dev ])
+          ++ (with localPackages; [ concurrencpp matplotplusplus zpp-bits ]);
+        # hardeningDisable = [ "all" ];
         # NIX_DEBUG = "1";
       };
     };
