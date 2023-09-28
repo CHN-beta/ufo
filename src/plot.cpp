@@ -83,6 +83,10 @@ int main(int argc, char** argv)
     total_distance += (Qpoints[i + 1] - Qpoints[i]).norm();
   }
 
+  // 打印结果看一下
+  for (auto& point : Points)
+    std::cout << point.Distance << " " << point.QPoint.transpose() << std::endl;
+
   // 对结果插值
   std::vector<Point> interpolated_points;
   for (unsigned i = 0; i < 1024; i++)
@@ -113,7 +117,7 @@ int main(int argc, char** argv)
   }
 
   // 将结果对应到像素上的值
-  std::vector<std::vector<double>> weight(400, std::vector<double>(1024, 0));
+  std::vector<std::vector<double>> weight(1024, std::vector<double>(400, 0));
   for (auto& point : interpolated_points)
   {
     int x = point.Distance / total_distance * 1024;
@@ -128,10 +132,40 @@ int main(int argc, char** argv)
         y = 0;
       else if (y >= 400)
         y = 399;
-      weight[y][x] += point.Weight(i);
+      weight[x][y] += point.Weight(i);
     }
   }
 
-  matplot::image(weight);
-  matplot::show();
+  std::ofstream fout("weight.txt");
+  for (unsigned i = 0; i < 400; i++)
+    fout << fmt::format(" {:.6f}", i * 0.1 - 5);
+  fout << std::endl;
+  for (unsigned i = 0; i < 1024; i++)
+  {
+    fout << fmt::format("{:.6f} ", total_distance / 1024 * i);
+    for (unsigned j = 0; j < 400; j++)
+      fout << fmt::format("{:.6f} ", weight[i][j]);
+    fout << std::endl;
+  }
+
+  std::vector<std::vector<double>>
+    r(400, std::vector<double>(1024, 0)),
+    g(400, std::vector<double>(1024, 0)),
+    b(400, std::vector<double>(1024, 0));
+  for (unsigned i = 0; i < 400; i++)
+    for (unsigned j = 0; j < 1024; j++)
+    {
+      r[i][j] = 255;
+      g[i][j] = 255 - weight[j][i] * 2 * 255;
+      if (g[i][j] < 0)
+        g[i][j] = 0;
+      b[i][j] = 255 - weight[j][i] * 2 * 255;
+      if (b[i][j] < 0)
+        b[i][j] = 0;
+    }
+  auto f = matplot::figure(true);
+  auto ax = f->current_axes();
+  ax->image(std::tie(r, g, b));
+  ax->y_axis().reverse(false);
+  f->show();
 }
