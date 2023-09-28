@@ -95,8 +95,9 @@ inline Input::Input(std::string filename)
     for (unsigned i = 0; i < points.size(); i++)
       for (unsigned j = 0; j < 3; j++)
         atom_position_to_super_cell(i, j) = points[i]["coordinates"][j].as<double>();
-    auto super_cell = SuperCellDeformation.value_or(Eigen::Matrix3d::Identity())
+    Eigen::Matrix3d super_cell = SuperCellDeformation.value_or(Eigen::Matrix3d::Identity())
       * SuperCellMultiplier.cast<double>().asDiagonal() * PrimativeCell;
+    std::cout << "SuperCell:\n" << super_cell << std::endl;
     AtomPosition = atom_position_to_super_cell * super_cell;
   }
   if (QPointDataInputFile.Format == "yaml")
