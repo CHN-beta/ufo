@@ -128,8 +128,8 @@ int main(int argc, const char** argv)
             for (int y = -1; y <= 1; y++)
               for (int z = -1; z <= 1; z++)
               {
-                auto this_qpoint = (current_qpoint
-                  + Eigen::Matrix<int, 3, 1>{{x}, {y}, {z}}.cast<double>()).eval();
+                auto this_qpoint = current_qpoint
+                  + Eigen::Matrix<int, 3, 1>{{x}, {y}, {z}}.cast<double>();
                 auto this_score = score(this_qpoint);
                 if (this_score < min_score)
                 {
