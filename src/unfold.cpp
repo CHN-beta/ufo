@@ -70,12 +70,13 @@ namespace ufo
             throw std::runtime_error("QPointDataOutputFile.SameAsConfigFile should not be set.");
           if
           (
-            !std::set<std::string>{"yaml", "yaml-human-readable", "zpp"}
+            !std::set<std::string>{"yaml", "yaml-human-readable", "zpp", "hdf5"}
               .contains(QPointDataOutputFile[i].Format)
           )
             throw std::runtime_error(fmt::format
             (
-              "Unknown QPointDataOutputFile[{}].Format: {}, should be \"yaml\", \"yaml-human-readable\" or \"zpp\".",
+              "Unknown QPointDataOutputFile[{}].Format: {}, should be "
+                "\"yaml\", \"yaml-human-readable\", \"zpp\" or \"hdf5\".",
               i, QPointDataOutputFile[i].Format
             ));
         }
@@ -239,6 +240,36 @@ namespace ufo
       std::ofstream file(filename, std::ios::binary | std::ios::out);
       file.exceptions(std::ios::badbit | std::ios::failbit);
       file.write(reinterpret_cast<const char*>(data.data()), data.size());
+    }
+    else if (format == "hdf5")
+    {
+      std::vector<std::vector<double>> Qpoint;
+      std::vector<std::vector<double>> Source;
+      std::vector<std::vector<double>> Frequency;
+      std::vector<std::vector<double>> Weight;
+      for (auto& qpoint : QPointData)
+      {
+        Qpoint.emplace_back(qpoint.QPoint.data(), qpoint.QPoint.data() + 3);
+        Source.emplace_back(qpoint.Source.data(), qpoint.Source.data() + 3);
+        Frequency.emplace_back();
+        Weight.emplace_back();
+        for (auto& mode : qpoint.ModeData)
+        {
+          Frequency.back().push_back(mode.Frequency);
+          Weight.back().push_back(mode.Weight);
+        }
+      }
+
+      HighFive::File file(filename,
+        HighFive::File::ReadWrite | HighFive::File::Create | HighFive::File::Truncate);
+      file.createDataSet<double>("QPoint",
+        HighFive::DataSpace::From(Qpoint)).write(Qpoint);
+      file.createDataSet<double>("Source",
+        HighFive::DataSpace::From(Source)).write(Source);
+      file.createDataSet<double>("Frequency",
+        HighFive::DataSpace::From(Frequency)).write(Frequency);
+      file.createDataSet<double>("Weight",
+        HighFive::DataSpace::From(Weight)).write(Weight);
     }
   }
 
