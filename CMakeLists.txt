@@ -22,14 +22,9 @@ find_package(TBB REQUIRED)
 find_package(Matplot++ REQUIRED)
 find_path(ZPP_BITS_INCLUDE_DIR zpp_bits.h REQUIRED)
 
-add_executable(ufo src/unfold.cpp src/main.cpp)
+add_executable(ufo src/unfold.cpp src/plot.cpp src/main.cpp)
 target_include_directories(ufo PRIVATE ${PROJECT_SOURCE_DIR}/include ${ZPP_BITS_INCLUDE_DIR})
 target_link_libraries(ufo PRIVATE
-  yaml-cpp Eigen3::Eigen fmt::fmt concurrencpp::concurrencpp HighFive_HighFive TBB::tbb Matplot++::matplot)
-
-add_executable(plot src/plot.cpp)
-target_include_directories(plot PRIVATE ${PROJECT_SOURCE_DIR}/include ${ZPP_BITS_INCLUDE_DIR})
-target_link_libraries(plot PRIVATE
   yaml-cpp Eigen3::Eigen fmt::fmt concurrencpp::concurrencpp HighFive_HighFive TBB::tbb Matplot++::matplot)
 
 get_property(ImportedTargets DIRECTORY "${CMAKE_SOURCE_DIR}" PROPERTY IMPORTED_TARGETS)

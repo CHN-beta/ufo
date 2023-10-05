@@ -50,7 +50,7 @@ namespace ufo
   {
     public:
       virtual Solver& operator()() = 0;
-      ~Solver() = default;
+      virtual ~Solver() = default;
 
       inline static concurrencpp::generator<std::pair<Eigen::Vector<unsigned, 3>, unsigned>>
         triplet_sequence(Eigen::Vector<unsigned, 3> range)

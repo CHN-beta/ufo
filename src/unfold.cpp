@@ -478,21 +478,3 @@ namespace ufo
     return output;
   }
 }
-
-// inline Output::Output(std::string filename)
-// {
-//   auto input = std::ifstream(filename, std::ios::binary | std::ios::in);
-//   input.exceptions(std::ios::badbit | std::ios::failbit);
-//   std::vector<std::byte> data;
-//   {
-//     std::vector<char> string(std::istreambuf_iterator<char>(input), {});
-//     data.assign
-//     (
-//       reinterpret_cast<std::byte*>(string.data()),
-//       reinterpret_cast<std::byte*>(string.data() + string.size())
-//     );
-//   }
-//   auto in = zpp::bits::in(data);
-//   in(*this).or_throw();
-// }
-
