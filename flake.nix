@@ -18,7 +18,7 @@
         packages = with pkgs; [ pkg-config cmake ninja ];
         buildInputs = (with pkgs; [ eigen yaml-cpp fmt highfive tbb_2021_8.dev ])
           ++ (with localPackages; [ concurrencpp matplotplusplus zpp-bits ]);
-        # hardeningDisable = [ "all" ];
+        hardeningDisable = [ "all" ];
         # NIX_DEBUG = "1";
       };
     };
