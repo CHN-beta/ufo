@@ -318,7 +318,7 @@ namespace ufo
         (*Basis_, mode_data, number_of_finished_modes);
       number_of_finished_modes = mode_data.size();
       print_thread.join();
-      std::clog << "\rCalculating projection coefficient... Done." << std::endl;
+      std::clog << "\33[2K\rCalculating projection coefficient... Done." << std::endl;
 
       std::clog << "Constructing output... " << std::flush;
       std::vector<std::reference_wrapper<const decltype(InputType::QPointDataType::QPoint)>> qpoint;
@@ -389,8 +389,8 @@ namespace ufo
     // 对每个模式并行
     std::transform
     (
-      std::execution::par, mode_data.begin(), mode_data.end(), projection_coefficient.begin(),
-      [&](const auto& mode_data)
+      std::execution::par, mode_data.begin(), mode_data.end(),
+      projection_coefficient.begin(), [&](const auto& mode_data)
       {
         // 这里, mode_data 和 projection_coefficient 均指对应于一个模式的数据
         std::vector<double> projection_coefficient(basis.size());
@@ -426,14 +426,14 @@ namespace ufo
   )
   {
     OutputType output;
-    for (unsigned i_of_qpoint = 0, num_of_mode_in_all_qpoint = 0; i_of_qpoint < qpoint.size(); i_of_qpoint++)
+    for (unsigned i_of_qpoint = 0, num_of_mode_manipulated = 0; i_of_qpoint < qpoint.size(); i_of_qpoint++)
     {
       // 当 SuperCellDeformation 不是单位矩阵时, input.QPointData[i_of_qpoint].QPoint 不一定在 reciprocal_primative_cell 中
       // 需要首先将 q 点平移数个周期, 进入不包含 SuperCellDeformation 的超胞的倒格子中
       auto qpoint_by_reciprocal_modified_super_cell_in_modified_reciprocal_super_cell
-        = !super_cell_deformation ? qpoint[i_of_qpoint].get() : [&]
+        = !super_cell_deformation ? qpoint.at(i_of_qpoint).get() : [&]
         {
-          auto current_qpoint = qpoint[i_of_qpoint].get();
+          auto current_qpoint = qpoint.at(i_of_qpoint).get();
           // 给一个 q 点打分
           // 计算这个 q 点以 modified_reciprocal_supre_cell 为单位的坐标, 依次考虑每个维度, 总分为每个维度之和.
           // 如果这个坐标大于 0 小于 1, 则打 0 分.
@@ -496,15 +496,16 @@ namespace ufo
         //  * PrimativeCell.transpose().inverse()
         // 得到 sub_qpoint_by_reciprocal_primative_cell = PrimativeCell * sub_qpoint
         _.QPoint = primative_cell * sub_qpoint;
-        _.Source = qpoint[i_of_qpoint];
+        _.Source = qpoint.at(i_of_qpoint);
         _.SourceIndex_ = i_of_qpoint;
-        for (unsigned i_of_mode = 0; i_of_mode < frequency[i_of_qpoint].size(); i_of_mode++, num_of_mode_in_all_qpoint++)
+        for (unsigned i_of_mode = 0; i_of_mode < frequency.at(i_of_qpoint).size(); i_of_mode++)
         {
           auto& __ = _.ModeData.emplace_back();
-          __.Frequency = frequency[i_of_qpoint][i_of_mode];
-          __.Weight = projection_coefficient[num_of_mode_in_all_qpoint][i_of_sub_qpoint];
+          __.Frequency = frequency.at(i_of_qpoint).at(i_of_mode);
+          __.Weight = projection_coefficient.at(num_of_mode_manipulated + i_of_mode).at(i_of_sub_qpoint);
         }
       }
+      num_of_mode_manipulated += frequency.at(i_of_qpoint).size();
     }
     return output;
   }
