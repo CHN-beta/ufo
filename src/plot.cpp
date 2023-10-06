@@ -179,7 +179,7 @@ namespace ufo
         values.push_back(blend
         (
           std::prev(it)->second.get(), it->second.get(),
-          (current_distance - std::prev(it)->first) / (it->first - std::prev(it)->first),
+          (it->first - current_distance) / (it->first - std::prev(it)->first),
           resolution.second, range)
         );
     }
