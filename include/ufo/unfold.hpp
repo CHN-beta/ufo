@@ -159,7 +159,6 @@ namespace ufo
 
       OutputType construct_output
       (
-        const decltype(InputType::PrimativeCell)& primative_cell,
         const decltype(InputType::SuperCellMultiplier)& super_cell_multiplier,
         const decltype(InputType::SuperCellDeformation)& super_cell_deformation,
         const std::vector<std::reference_wrapper<const decltype

@@ -333,7 +333,7 @@ namespace ufo
       }
       Output_ = construct_output
       (
-        Input_.PrimativeCell, Input_.SuperCellMultiplier,
+        Input_.SuperCellMultiplier,
         Input_.SuperCellDeformation, qpoint, frequency, projection_coefficient
       );
       std::clog << "Done." << std::endl;
@@ -415,7 +415,6 @@ namespace ufo
 
   UnfoldSolver::OutputType UnfoldSolver::construct_output
   (
-    const decltype(InputType::PrimativeCell)& primative_cell,
     const decltype(InputType::SuperCellMultiplier)& super_cell_multiplier,
     const decltype(InputType::SuperCellDeformation)& super_cell_deformation,
     const std::vector<std::reference_wrapper<const decltype
@@ -429,13 +428,13 @@ namespace ufo
     for (unsigned i_of_qpoint = 0, num_of_mode_manipulated = 0; i_of_qpoint < qpoint.size(); i_of_qpoint++)
     {
       // 当 SuperCellDeformation 不是单位矩阵时, input.QPointData[i_of_qpoint].QPoint 不一定在 reciprocal_primative_cell 中
-      // 需要首先将 q 点平移数个周期, 进入不包含 SuperCellDeformation 的超胞的倒格子中
-      auto qpoint_by_reciprocal_modified_super_cell_in_modified_reciprocal_super_cell
+      // 需要首先将 q 点平移数个周期, 进入不包含 SuperCellDeformation 的超胞 (称为 ModifiedSupreCell) 的倒格子中
+      auto qpoint_by_reciprocal_modified_super_cell_in_reciprocal_modified_super_cell
         = !super_cell_deformation ? qpoint[i_of_qpoint].get() : [&]
         {
           auto current_qpoint = qpoint[i_of_qpoint].get();
           // 给一个 q 点打分
-          // 计算这个 q 点以 modified_reciprocal_supre_cell 为单位的坐标, 依次考虑每个维度, 总分为每个维度之和.
+          // 计算这个 q 点以 reciprocal_modified_supre_cell 为单位的坐标, 依次考虑每个维度, 总分为每个维度之和.
           // 如果这个坐标大于 0 小于 1, 则打 0 分.
           // 如果这个坐标小于 0, 则打这个坐标的相反数分.
           // 如果这个坐标大于 1, 则打这个坐标减去 1 的分.
@@ -485,17 +484,22 @@ namespace ufo
         : triplet_sequence(super_cell_multiplier))
       {
         auto& _ = output.QPointData.emplace_back();
-        auto reciprocal_modified_super_cell =
-          (super_cell_multiplier.cast<double>().asDiagonal() * primative_cell).inverse().transpose();
-        // sub qpoint 的坐标，单位为埃^-1
-        auto sub_qpoint = ((xyz_of_diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>()
-          + qpoint_by_reciprocal_modified_super_cell_in_modified_reciprocal_super_cell)
-          .transpose() * reciprocal_modified_super_cell).transpose();
-        // 将坐标转换为相对于单胞的倒格矢的坐标并写入
-        // 由 sub_qpoint.transpose() = sub_qpoint_by_reciprocal_primative_cell.transpose()
-        //  * PrimativeCell.transpose().inverse()
-        // 得到 sub_qpoint_by_reciprocal_primative_cell = PrimativeCell * sub_qpoint
-        _.QPoint = primative_cell * sub_qpoint;
+        /*
+          SubQpointByReciprocalModifiedSuperCell = XyzOfDiffOfSubQpointByReciprocalModifiedSuperCell +
+            QpointInReciprocalModifiedSuperCellByReciprocalModifiedSuperCell;
+          SubQpoint = SubQpointByReciprocalModifiedSuperCell.transpose() * ReciprocalModifiedSuperCell;
+          SubQpoint = SubQpointByReciprocalPrimativeCell.transpose() * ReciprocalPrimativeCell;
+          ReciprocalModifiedSuperCell = ModifiedSuperCell.inverse().transpose();
+          ReciprocalPrimativeCell = PrimativeCell.inverse().transpose();
+          ModifiedSuperCell = SuperCellMultiplier.asDiagonal() * PrimativeCell;
+          整理可以得到:
+          SubQpointByReciprocalPrimativeCell = SuperCellMultiplier.asDiagonal().inverse() *
+            (XyzOfDiffOfSubQpointByReciprocalModifiedSuperCell +
+            QpointInReciprocalModifiedSuperCellByReciprocalModifiedSuperCell);
+        */
+        _.QPoint = super_cell_multiplier.cast<double>().cwiseInverse().asDiagonal()
+          * (xyz_of_diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>()
+            + qpoint_by_reciprocal_modified_super_cell_in_reciprocal_modified_super_cell);
         _.Source = qpoint[i_of_qpoint];
         _.SourceIndex_ = i_of_qpoint;
         for (unsigned i_of_mode = 0; i_of_mode < frequency[i_of_qpoint].size(); i_of_mode++)
