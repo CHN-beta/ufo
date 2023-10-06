@@ -1,0 +1,12 @@
+PrimativeCell:
+- [     1.548010265167714,    -2.681232429908652,     0.000000000000000 ] # a
+- [     1.548010265167714,     2.681232429908652,     0.000000000000000 ] # b
+- [     0.000000000000000,     0.000000000000000,     5.061224103556595 ] # c
+SuperCellMultiplier: [ 3, 1, 1 ]
+PrimativeCellBasisNumber: [ 8, 8, 8 ]
+AtomPositionInputFile: { FileName: "/home/chn/Documents/lammps-SiC/14/14.2/14.2.2/14.2.2.5/band.yaml", Format: "yaml" }
+QPointDataInputFile: { FileName: "/home/chn/Documents/lammps-SiC/14/14.2/14.2.2/14.2.2.5/band.yaml", Format: "yaml" }
+QPointDataOutputFile:
+- { FileName: "test/14.2.2.5.result.yaml", Format: "yaml" }
+- { FileName: "test/14.2.2.5.result.human-readable.yaml", Format: "yaml-human-readable" }
+- { FileName: "test/14.2.2.5.result.zpp", Format: "zpp" }
