@@ -446,14 +446,13 @@ namespace ufo
           ModifiedSuperCell = SuperCellMultiplier.asDiagonal() * PrimativeCell;
           MetaQpoint = MetaQpointByReciprocalModifiedSuperCell.transpose() * ReciprocalModifiedSuperCell;
           MetaQpoint = MetaQpointByReciprocalSuperCell.transpose() * ReciprocalSuperCell;
-          ReciprocalModifiedSuperCell = ModifiedSuperCell.inverse().transpose();
           ReciprocalSuperCell = SuperCell.inverse().transpose();
           ModifiedSuperCell = SuperCellDeformation * SuperCell;
           SuperCell = SuperCellMultiplier.asDiagonal() * PrimativeCell;
           整理可以得到:
           SubQpointByReciprocalPrimativeCell = SuperCellMultiplier.asDiagonal().inverse() *
             (XyzOfDiffOfSubQpointByReciprocalModifiedSuperCell +
-              SuperCellDeformation * MetaQpointByReciprocalSuperCell);
+              SuperCellDeformation.inverse() * MetaQpointByReciprocalSuperCell);
           但注意到, 这样得到的 SubQpoint 可能不在 ReciprocalPrimativeCell 中
             (当 SuperCellDeformation 不是单位矩阵时, 边界附近的一两条 SubQpoint 会出现这种情况).
           解决办法是, 在赋值时, 仅取 SubQpointByReciprocalPrimativeCell 的小数部分.
@@ -463,7 +462,7 @@ namespace ufo
           super_cell_multiplier.cast<double>().cwiseInverse().asDiagonal()
           * (
             xyz_of_diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>()
-            + super_cell_deformation.value_or(Eigen::Matrix3d::Identity())
+            + super_cell_deformation.value_or(Eigen::Matrix3d::Identity()).inverse()
               * meta_qpoint_by_reciprocal_super_cell[i_of_meta_qpoint].get().cast<double>()
           )
         ).eval();
