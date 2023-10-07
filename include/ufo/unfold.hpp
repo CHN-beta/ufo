@@ -57,11 +57,13 @@ namespace ufo
           {
             // 模式的频率，单位为 THz
             double Frequency;
-            // 模式中各个原子的运动状态
-            // 这个数据是这样得到的: phonopy 输出的动态矩阵的 eigenvector 乘以 $\exp(-2 \pi i \vec q \cdot \vec r)$
-            // 这个数据可以认为是原子位移中, 关于超胞有周期性的那一部分, 再乘以原子质量的开方.
-            // 这个数据在读入后会被立即归一化.
-            Eigen::MatrixX3cd AtomMovement;
+            /*
+              phonopy 中定义的动态矩阵的特征向量, 代表模式中各个原子的运动状态
+                (也即原子位移中, 关于超胞有周期性的那一部分, 再乘以原子质量的开方).
+              phonopy 的动态矩阵的定义与一般的定义不同, 因此这里的这个特征向量不是一般意义上的动态矩阵的特征向量.
+              尽管在计算时, 确实需要将这个特征向量转化为标准的动态矩阵的特征向量, 但为了节省计算量, 在反折叠时一起计算, 而不是在输入时计算.
+            */
+            Eigen::MatrixX3cd PhonopyEigenvector;
           };
           std::vector<ModeDataType> ModeData;
         };
@@ -118,54 +120,41 @@ namespace ufo
 
         virtual ~OutputType() = default;
       };
-
-      // 第一层是不同的 sub qpoint, 第二层是单胞内不同的平面波
-      using BasisType = std::vector<std::vector<Eigen::VectorXcd>>;
     protected:
       InputType Input_;
       std::optional<OutputType> Output_;
-      std::optional<BasisType> Basis_;
-
-      // 第一层是不同的模式, 第二层是不同的 sub qpoint
-      using ProjectionCoefficientType_ = std::vector<std::vector<double>>;
 
     public:
       UnfoldSolver(std::string config_file);
       UnfoldSolver& operator()() override;
 
-      // 构建基
-      // 每个 q 点对应的一组 sub qpoint。不同的 q 点所对应的 sub qpoint 是不一样的，但 sub qpoint 与 q 点的相对位置一致。
-      // 这里 xyz_of_diff_of_sub_qpoint 即表示这个相对位置。
-      // 由于基只与这个相对位置有关（也就是说，不同 q 点的基是一样的），因此可以先计算出所有的基，这样降低计算量。
-      // 外层下标对应超胞倒格子的整数倍那部分(第二部分), 也就是不同的 sub qpoint
-      // 内层下标对应单胞倒格子的整数倍那部分(第一部分), 也就是 sub qpoint 上的不同平面波（取的数量越多，结果越精确）
-      static BasisType construct_basis
-      (
-        const decltype(InputType::PrimativeCell)& primative_cell,
-        const decltype(InputType::SuperCellMultiplier)& super_cell_multiplier,
-        const decltype(InputType::PrimativeCellBasisNumber)&
-          primative_cell_basis_number,
-        const decltype(InputType::AtomPosition)& atom_position
-      );
-
-      // 计算投影系数, 是反折叠的核心步骤
-      ProjectionCoefficientType_ construct_projection_coefficient
-      (
-        const BasisType& basis,
-        const std::vector<std::reference_wrapper<const decltype
-          (InputType::QpointDataType::ModeDataType::AtomMovement)>>& mode_data,
-        std::atomic<unsigned>& number_of_finished_modes
-      );
-
-      OutputType construct_output
-      (
-        const decltype(InputType::SuperCellMultiplier)& super_cell_multiplier,
-        const decltype(InputType::SuperCellDeformation)& super_cell_deformation,
-        const std::vector<std::reference_wrapper<const decltype
-          (InputType::QpointDataType::Qpoint)>>& meta_qpoint_by_reciprocal_super_cell,
-        const std::vector<std::vector<std::reference_wrapper<const decltype
-          (InputType::QpointDataType::ModeDataType::Frequency)>>>& frequency,
-        const ProjectionCoefficientType_& projection_coefficient
-      );
+      // 计算单个 MetaQpoint 到所有 SubQpoint 的投影系数, 是反折叠的核心步骤
+      struct ConstructProjectionCoefficientInputType
+      {
+        struct
+        {
+          const Eigen::Matrix3d& PrimativeCell;
+          const Eigen::Vector<unsigned, 3>& SuperCellMultiplier;
+          const std::optional<Eigen::Matrix<double, 3, 3>>& SuperCellDeformation;
+          const Eigen::Vector<unsigned, 3>& PrimativeCellBasisNumber;
+          const Eigen::MatrixX3d& AtomPosition;
+        } GlobalData;
+        struct
+        {
+          const Eigen::Vector3d& MetaQpointByReciprocalSuperCell;
+          const std::vector<InputType::QpointDataType::ModeDataType>& ModeData;
+        } MetaQpointData;
+      };
+      struct ConstructProjectionCoefficientOutputType
+      {
+        struct SubQpointDataType
+        {
+          Eigen::Vector3d SubQpointByReciprocalPrimativeCell;
+          std::vector<OutputType::QpointDataType::ModeDataType> ModeData;
+        };
+        std::vector<SubQpointDataType> SubQpointData;
+      };
+      static ConstructProjectionCoefficientOutputType construct_projection_coefficient
+        (ConstructProjectionCoefficientInputType Input);
   };
 }
