@@ -46,6 +46,7 @@ namespace ufo
       // 根据搜索到的 q 点, 计算每个点的数值
       static std::tuple<std::vector<std::vector<double>>, std::vector<double>> calculate_values
       (
+        const Eigen::Matrix3d primative_cell,
         const std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>& path,
         const std::vector<std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>>>& qpoints,
         const decltype(InputType::FigureConfigType::Resolution)& resolution,
