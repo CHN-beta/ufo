@@ -418,98 +418,67 @@ namespace ufo
     const decltype(InputType::SuperCellMultiplier)& super_cell_multiplier,
     const decltype(InputType::SuperCellDeformation)& super_cell_deformation,
     const std::vector<std::reference_wrapper<const decltype
-      (InputType::QpointDataType::Qpoint)>>& qpoint,
+      (InputType::QpointDataType::Qpoint)>>& meta_qpoint_by_reciprocal_super_cell,
     const std::vector<std::vector<std::reference_wrapper<const decltype
       (InputType::QpointDataType::ModeDataType::Frequency)>>>& frequency,
     const ProjectionCoefficientType_& projection_coefficient
   )
   {
     OutputType output;
-    for (unsigned i_of_qpoint = 0, num_of_mode_manipulated = 0; i_of_qpoint < qpoint.size(); i_of_qpoint++)
+    for
+    (
+      unsigned i_of_meta_qpoint = 0, num_of_mode_manipulated = 0;
+      i_of_meta_qpoint < meta_qpoint_by_reciprocal_super_cell.size();
+      i_of_meta_qpoint++
+    )
     {
-      // 当 SuperCellDeformation 不是单位矩阵时, input.QpointData[i_of_qpoint].Qpoint 不一定在 reciprocal_primative_cell 中
-      // 需要首先将 q 点平移数个周期, 进入不包含 SuperCellDeformation 的超胞 (称为 ModifiedSupreCell) 的倒格子中
-      auto qpoint_by_reciprocal_modified_super_cell_in_reciprocal_modified_super_cell
-        = !super_cell_deformation ? qpoint[i_of_qpoint].get() : [&]
-        {
-          auto current_qpoint = qpoint[i_of_qpoint].get();
-          // 给一个 q 点打分
-          // 计算这个 q 点以 reciprocal_modified_supre_cell 为单位的坐标, 依次考虑每个维度, 总分为每个维度之和.
-          // 如果这个坐标大于 0 小于 1, 则打 0 分.
-          // 如果这个坐标小于 0, 则打这个坐标的相反数分.
-          // 如果这个坐标大于 1, 则打这个坐标减去 1 的分.
-          auto score = [&](Eigen::Vector3d qpoint_by_reciprocal_super_cell)
-          {
-            // SuperCell = SuperCellDeformation * SuperCellMultiplier.asDiagonal() * PrimativeCell
-            // ModifiedSuperCell = SuperCellMultiplier.asDiagonal() * PrimativeCell
-            // ReciprocalSuperCell = SuperCell.inverse().transpose()
-            // ReciprocalModifiedSuperCell = ModifiedSuperCell.inverse().transpose()
-            // qpoint.transpose() = qpoint_by_reciprocal_super_cell.transpose() * ReciprocalSuperCell
-            // qpoint.transpose() = qpoint_by_reciprocal_modified_super_cell.transpose() * ReciprocalModifiedSuperCell
-            auto qpoint_by_reciprocal_modified_super_cell =
-              (super_cell_deformation->inverse() * qpoint_by_reciprocal_super_cell).eval();
-            double score = 0;
-            for (unsigned i = 0; i < 3; i++)
-            {
-              auto coordinate = qpoint_by_reciprocal_modified_super_cell[i];
-              if (coordinate < 0)
-                score -= coordinate;
-              else if (coordinate > 1)
-                score += coordinate - 1;
-            }
-            return score;
-          };
-          while (score(current_qpoint) > 0)
-          {
-            double min_score = std::numeric_limits<double>::max();
-            Eigen::Vector3d min_score_qpoint;
-            for (int x = -1; x <= 1; x++)
-              for (int y = -1; y <= 1; y++)
-                for (int z = -1; z <= 1; z++)
-                {
-                  auto this_qpoint = current_qpoint
-                    + Eigen::Matrix<int, 3, 1>{{x}, {y}, {z}}.cast<double>();
-                  auto this_score = score(this_qpoint);
-                  if (this_score < min_score)
-                  {
-                    min_score = this_score;
-                    min_score_qpoint = this_qpoint;
-                  }
-                }
-            current_qpoint = min_score_qpoint;
-          }
-          return super_cell_deformation->inverse() * current_qpoint;
-        }();
       for (auto [xyz_of_diff_of_sub_qpoint_by_reciprocal_modified_super_cell, i_of_sub_qpoint]
         : triplet_sequence(super_cell_multiplier))
       {
         auto& _ = output.QpointData.emplace_back();
         /*
           SubQpointByReciprocalModifiedSuperCell = XyzOfDiffOfSubQpointByReciprocalModifiedSuperCell +
-            QpointInReciprocalModifiedSuperCellByReciprocalModifiedSuperCell;
+            MetaQpointByReciprocalModifiedSuperCell;
           SubQpoint = SubQpointByReciprocalModifiedSuperCell.transpose() * ReciprocalModifiedSuperCell;
           SubQpoint = SubQpointByReciprocalPrimativeCell.transpose() * ReciprocalPrimativeCell;
           ReciprocalModifiedSuperCell = ModifiedSuperCell.inverse().transpose();
           ReciprocalPrimativeCell = PrimativeCell.inverse().transpose();
           ModifiedSuperCell = SuperCellMultiplier.asDiagonal() * PrimativeCell;
+          MetaQpoint = MetaQpointByReciprocalModifiedSuperCell.transpose() * ReciprocalModifiedSuperCell;
+          MetaQpoint = MetaQpointByReciprocalSuperCell.transpose() * ReciprocalSuperCell;
+          ReciprocalModifiedSuperCell = ModifiedSuperCell.inverse().transpose();
+          ReciprocalSuperCell = SuperCell.inverse().transpose();
+          ModifiedSuperCell = SuperCellDeformation * SuperCell;
+          SuperCell = SuperCellMultiplier.asDiagonal() * PrimativeCell;
           整理可以得到:
           SubQpointByReciprocalPrimativeCell = SuperCellMultiplier.asDiagonal().inverse() *
             (XyzOfDiffOfSubQpointByReciprocalModifiedSuperCell +
-            QpointInReciprocalModifiedSuperCellByReciprocalModifiedSuperCell);
+              SuperCellDeformation * MetaQpointByReciprocalSuperCell);
+          但注意到, 这样得到的 SubQpoint 可能不在 ReciprocalPrimativeCell 中
+            (当 SuperCellDeformation 不是单位矩阵时, 边界附近的一两条 SubQpoint 会出现这种情况).
+          解决办法是, 在赋值时, 仅取 SubQpointByReciprocalPrimativeCell 的小数部分.
         */
-        _.Qpoint = super_cell_multiplier.cast<double>().cwiseInverse().asDiagonal()
-          * (xyz_of_diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>()
-            + qpoint_by_reciprocal_modified_super_cell_in_reciprocal_modified_super_cell);
-        _.Source = qpoint[i_of_qpoint];
-        _.SourceIndex_ = i_of_qpoint;
-        for (unsigned i_of_mode = 0; i_of_mode < frequency[i_of_qpoint].size(); i_of_mode++)
+        auto sub_qpoint_by_reciprocal_primative_cell =
+        (
+          super_cell_multiplier.cast<double>().cwiseInverse().asDiagonal()
+          * (
+            xyz_of_diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>()
+            + super_cell_deformation.value_or(Eigen::Matrix3d::Identity())
+              * meta_qpoint_by_reciprocal_super_cell[i_of_meta_qpoint].get().cast<double>()
+          )
+        ).eval();
+        _.Qpoint = sub_qpoint_by_reciprocal_primative_cell.array()
+          - sub_qpoint_by_reciprocal_primative_cell.array().floor();
+        _.Source = meta_qpoint_by_reciprocal_super_cell[i_of_meta_qpoint];
+        _.SourceIndex_ = i_of_meta_qpoint;
+        for (unsigned i_of_mode = 0; i_of_mode < frequency[i_of_meta_qpoint].size(); i_of_mode++)
         {
           auto& __ = _.ModeData.emplace_back();
-          __.Frequency = frequency[i_of_qpoint][i_of_mode];
+          __.Frequency = frequency[i_of_meta_qpoint][i_of_mode];
           __.Weight = projection_coefficient[num_of_mode_manipulated + i_of_mode][i_of_sub_qpoint];
         }
       }
-      num_of_mode_manipulated += frequency[i_of_qpoint].size();
+      num_of_mode_manipulated += frequency[i_of_meta_qpoint].size();
     }
     return output;
   }

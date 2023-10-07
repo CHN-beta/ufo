@@ -5,8 +5,8 @@ PrimativeCell:
 SuperCellMultiplier: [ 3, 1, 1 ]
 PrimativeCellBasisNumber: [ 8, 8, 8 ]
 AtomPositionInputFile: { FileName: "/home/chn/Documents/lammps-SiC/14/14.2/14.2.2/14.2.2.5/band.yaml", Format: "yaml" }
-QPointDataInputFile: { FileName: "/home/chn/Documents/lammps-SiC/14/14.2/14.2.2/14.2.2.5/band.yaml", Format: "yaml" }
-QPointDataOutputFile:
+QpointDataInputFile: { FileName: "/home/chn/Documents/lammps-SiC/14/14.2/14.2.2/14.2.2.5/band.yaml", Format: "yaml" }
+QpointDataOutputFile:
 - { FileName: "test/14.2.2.5.result.yaml", Format: "yaml" }
 - { FileName: "test/14.2.2.5.result.human-readable.yaml", Format: "yaml-human-readable" }
 - { FileName: "test/14.2.2.5.result.zpp", Format: "zpp" }

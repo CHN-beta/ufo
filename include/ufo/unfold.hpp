@@ -162,7 +162,7 @@ namespace ufo
         const decltype(InputType::SuperCellMultiplier)& super_cell_multiplier,
         const decltype(InputType::SuperCellDeformation)& super_cell_deformation,
         const std::vector<std::reference_wrapper<const decltype
-          (InputType::QpointDataType::Qpoint)>>& qpoint,
+          (InputType::QpointDataType::Qpoint)>>& meta_qpoint_by_reciprocal_super_cell,
         const std::vector<std::vector<std::reference_wrapper<const decltype
           (InputType::QpointDataType::ModeDataType::Frequency)>>>& frequency,
         const ProjectionCoefficientType_& projection_coefficient
