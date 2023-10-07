@@ -52,32 +52,32 @@ namespace ufo
       if (!std::set<std::string>{"yaml"}.contains(AtomPositionInputFile.Format))
         throw std::runtime_error(fmt::format
           ("Unknown AtomPositionInputFile.Format: {}, should be \"yaml\".", AtomPositionInputFile.Format));
-      read_file_config(node["QPointDataInputFile"], QPointDataInputFile);
-      if (!std::set<std::string>{"yaml", "hdf5"}.contains(QPointDataInputFile.Format))
+      read_file_config(node["QpointDataInputFile"], QpointDataInputFile);
+      if (!std::set<std::string>{"yaml", "hdf5"}.contains(QpointDataInputFile.Format))
         throw std::runtime_error(fmt::format
-          ("Unknown QPointDataInputFile.Format: {}, should be \"yaml\" or \"hdf5\".", QPointDataInputFile.Format));
-      if (auto value = node["QPointDataOutputFile"])
+          ("Unknown QpointDataInputFile.Format: {}, should be \"yaml\" or \"hdf5\".", QpointDataInputFile.Format));
+      if (auto value = node["QpointDataOutputFile"])
       {
-        QPointDataOutputFile.resize(value.size());
+        QpointDataOutputFile.resize(value.size());
         for (unsigned i = 0; i < value.size(); i++)
         {
-          read_file_config(value[i], QPointDataOutputFile[i]);
+          read_file_config(value[i], QpointDataOutputFile[i]);
           if
           (
-            QPointDataOutputFile[i].ExtraParameters.contains("SameAsConfigFile")
-            && std::any_cast<bool>(QPointDataOutputFile[i].ExtraParameters["SameAsConfigFile"])
+            QpointDataOutputFile[i].ExtraParameters.contains("SameAsConfigFile")
+            && std::any_cast<bool>(QpointDataOutputFile[i].ExtraParameters["SameAsConfigFile"])
           )
-            throw std::runtime_error("QPointDataOutputFile.SameAsConfigFile should not be set.");
+            throw std::runtime_error("QpointDataOutputFile.SameAsConfigFile should not be set.");
           if
           (
             !std::set<std::string>{"yaml", "yaml-human-readable", "zpp", "hdf5"}
-              .contains(QPointDataOutputFile[i].Format)
+              .contains(QpointDataOutputFile[i].Format)
           )
             throw std::runtime_error(fmt::format
             (
-              "Unknown QPointDataOutputFile[{}].Format: {}, should be "
+              "Unknown QpointDataOutputFile[{}].Format: {}, should be "
                 "\"yaml\", \"yaml-human-readable\", \"zpp\" or \"hdf5\".",
-              i, QPointDataOutputFile[i].Format
+              i, QpointDataOutputFile[i].Format
             ));
         }
       }
@@ -99,20 +99,20 @@ namespace ufo
         * SuperCellMultiplier.cast<double>().asDiagonal() * PrimativeCell).eval();
       AtomPosition = atom_position_to_super_cell * super_cell;
     }
-    if (QPointDataInputFile.Format == "yaml")
+    if (QpointDataInputFile.Format == "yaml")
     {
-      auto node = YAML::LoadFile(QPointDataInputFile.FileName);
+      auto node = YAML::LoadFile(QpointDataInputFile.FileName);
       auto phonon = node["phonon"].as<std::vector<YAML::Node>>();
-      QPointData.resize(phonon.size());
+      QpointData.resize(phonon.size());
       for (unsigned i = 0; i < phonon.size(); i++)
       {
         for (unsigned j = 0; j < 3; j++)
-          QPointData[i].QPoint(j) = phonon[i]["q-position"][j].as<double>();
+          QpointData[i].Qpoint(j) = phonon[i]["q-position"][j].as<double>();
         auto band = phonon[i]["band"].as<std::vector<YAML::Node>>();
-        QPointData[i].ModeData.resize(band.size());
+        QpointData[i].ModeData.resize(band.size());
         for (unsigned j = 0; j < band.size(); j++)
         {
-          QPointData[i].ModeData[j].Frequency = band[j]["frequency"].as<double>();
+          QpointData[i].ModeData[j].Frequency = band[j]["frequency"].as<double>();
           auto eigenvector_vectors = band[j]["eigenvector"]
             .as<std::vector<std::vector<std::vector<double>>>>();
           Eigen::MatrixX3cd eigenvectors(AtomPosition.rows(), 3);
@@ -122,18 +122,18 @@ namespace ufo
                 = eigenvector_vectors[k][l][0] + 1i * eigenvector_vectors[k][l][1];
           // 需要对读入的原子运动状态作相位转换, 使得它们与我们的约定一致(对超胞周期性重复)
           // 这里还要需要做归一化处理 (指将数据简单地作为向量处理的归一化)
-          auto& AtomMovement = QPointData[i].ModeData[j].AtomMovement;
+          auto& AtomMovement = QpointData[i].ModeData[j].AtomMovement;
           // AtomMovement = eigenvectors.array().colwise() * (-2 * std::numbers::pi_v<double> * 1i
-          //   * (atom_position_to_super_cell * input.QPointData[i].QPoint)).array().exp();
+          //   * (atom_position_to_super_cell * input.QpointData[i].Qpoint)).array().exp();
           // AtomMovement /= AtomMovement.norm();
           // phonopy 似乎已经进行了相位的转换！为什么？
           AtomMovement = eigenvectors / eigenvectors.norm();
         }
       }
     }
-    else if (QPointDataInputFile.Format == "hdf5")
+    else if (QpointDataInputFile.Format == "hdf5")
     {
-      HighFive::File file(QPointDataInputFile.FileName, HighFive::File::ReadOnly);
+      HighFive::File file(QpointDataInputFile.FileName, HighFive::File::ReadOnly);
       auto size = file.getDataSet("/frequency").getDimensions();
       auto frequency = file.getDataSet("/frequency")
         .read<std::vector<std::vector<std::vector<double>>>>();
@@ -141,28 +141,28 @@ namespace ufo
         .read<std::vector<std::vector<std::vector<std::vector<PhonopyComplex>>>>>();
       auto path = file.getDataSet("/path")
         .read<std::vector<std::vector<std::vector<double>>>>();
-      QPointData.resize(size[0] * size[1]);
+      QpointData.resize(size[0] * size[1]);
       for (unsigned i = 0; i < size[0]; i++)
         for (unsigned j = 0; j < size[1]; j++)
         {
-          QPointData[i * size[1] + j].QPoint = Eigen::Vector3d(path[i][j].data());
-          QPointData[i * size[1] + j].ModeData.resize(size[2]);
+          QpointData[i * size[1] + j].Qpoint = Eigen::Vector3d(path[i][j].data());
+          QpointData[i * size[1] + j].ModeData.resize(size[2]);
           for (unsigned k = 0; k < size[2]; k++)
           {
-            QPointData[i * size[1] + j].ModeData[k].Frequency = frequency[i][j][k];
+            QpointData[i * size[1] + j].ModeData[k].Frequency = frequency[i][j][k];
             Eigen::MatrixX3cd eigenvectors(AtomPosition.rows(), 3);
             for (unsigned l = 0; l < AtomPosition.rows(); l++)
               for (unsigned m = 0; m < 3; m++)
                 eigenvectors(l, m)
                   = eigenvector_vector[i][j][l * 3 + m][k].r + eigenvector_vector[i][j][l * 3 + m][k].i * 1i;
-            QPointData[i * size[1] + j].ModeData[k].AtomMovement = eigenvectors / eigenvectors.norm();
+            QpointData[i * size[1] + j].ModeData[k].AtomMovement = eigenvectors / eigenvectors.norm();
           }
         }
     }
   }
 
   void UnfoldSolver::OutputType::write
-    (decltype(InputType::QPointDataOutputFile) output_files) const
+    (decltype(InputType::QpointDataOutputFile) output_files) const
   {
     for (auto& output_file : output_files)
       write(output_file.FileName, output_file.Format);
@@ -173,11 +173,11 @@ namespace ufo
       std::ofstream(filename) << [&]
       {
         std::stringstream print;
-        print << "QPointData:\n";
-        for (auto& qpoint: QPointData)
+        print << "QpointData:\n";
+        for (auto& qpoint: QpointData)
         {
-          print << fmt::format("  - QPoint: [ {1:.{0}f}, {2:.{0}f}, {3:.{0}f} ]\n",
-            percision, qpoint.QPoint[0], qpoint.QPoint[1], qpoint.QPoint[2]);
+          print << fmt::format("  - Qpoint: [ {1:.{0}f}, {2:.{0}f}, {3:.{0}f} ]\n",
+            percision, qpoint.Qpoint[0], qpoint.Qpoint[1], qpoint.Qpoint[2]);
           print << fmt::format("    Source: [ {1:.{0}f}, {2:.{0}f}, {3:.{0}f} ]\n",
             percision, qpoint.Source[0], qpoint.Source[1], qpoint.Source[2]);
           print << "    ModeData:\n";
@@ -190,9 +190,9 @@ namespace ufo
     else if (format == "yaml-human-readable")
     {
       std::remove_cvref_t<decltype(*this)> output;
-      std::map<unsigned, std::vector<decltype(QPointData)::const_iterator>>
+      std::map<unsigned, std::vector<decltype(QpointData)::const_iterator>>
         meta_qpoint_to_sub_qpoint_iterators;
-      for (auto it = QPointData.begin(); it != QPointData.end(); it++)
+      for (auto it = QpointData.begin(); it != QpointData.end(); it++)
         meta_qpoint_to_sub_qpoint_iterators[it->SourceIndex_].push_back(it);
       for (auto [meta_qpoint_index, sub_qpoint_iterators] : meta_qpoint_to_sub_qpoint_iterators)
         for (auto& qpoint : sub_qpoint_iterators)
@@ -218,8 +218,8 @@ namespace ufo
               frequency_to_weight[frequency_sum / weight_sum] = weight_sum;
             }
           }
-          auto& _ = output.QPointData.emplace_back();
-          _.QPoint = qpoint->QPoint;
+          auto& _ = output.QpointData.emplace_back();
+          _.Qpoint = qpoint->Qpoint;
           _.Source = qpoint->Source;
           _.SourceIndex_ = qpoint->SourceIndex_;
           for (auto [frequency, weight] : frequency_to_weight)
@@ -247,9 +247,9 @@ namespace ufo
       std::vector<std::vector<double>> Source;
       std::vector<std::vector<double>> Frequency;
       std::vector<std::vector<double>> Weight;
-      for (auto& qpoint : QPointData)
+      for (auto& qpoint : QpointData)
       {
-        Qpoint.emplace_back(qpoint.QPoint.data(), qpoint.QPoint.data() + 3);
+        Qpoint.emplace_back(qpoint.Qpoint.data(), qpoint.Qpoint.data() + 3);
         Source.emplace_back(qpoint.Source.data(), qpoint.Source.data() + 3);
         Frequency.emplace_back();
         Weight.emplace_back();
@@ -262,7 +262,7 @@ namespace ufo
 
       HighFive::File file(filename,
         HighFive::File::ReadWrite | HighFive::File::Create | HighFive::File::Truncate);
-      file.createDataSet<double>("QPoint",
+      file.createDataSet<double>("Qpoint",
         HighFive::DataSpace::From(Qpoint)).write(Qpoint);
       file.createDataSet<double>("Source",
         HighFive::DataSpace::From(Source)).write(Source);
@@ -298,8 +298,8 @@ namespace ufo
     {
       std::clog << "Calculating projection coefficient... " << std::flush;
       std::vector<std::reference_wrapper<const decltype
-        (InputType::QPointDataType::ModeDataType::AtomMovement)>> mode_data;
-      for (auto& qpoint : Input_.QPointData)
+        (InputType::QpointDataType::ModeDataType::AtomMovement)>> mode_data;
+      for (auto& qpoint : Input_.QpointData)
         for (auto& mode : qpoint.ModeData)
           mode_data.emplace_back(mode.AtomMovement);
       std::atomic<unsigned> number_of_finished_modes(0);
@@ -321,12 +321,12 @@ namespace ufo
       std::clog << "\33[2K\rCalculating projection coefficient... Done." << std::endl;
 
       std::clog << "Constructing output... " << std::flush;
-      std::vector<std::reference_wrapper<const decltype(InputType::QPointDataType::QPoint)>> qpoint;
+      std::vector<std::reference_wrapper<const decltype(InputType::QpointDataType::Qpoint)>> qpoint;
       std::vector<std::vector<std::reference_wrapper<const
-        decltype(InputType::QPointDataType::ModeDataType::Frequency)>>> frequency;
-      for (auto& qpoint_data : Input_.QPointData)
+        decltype(InputType::QpointDataType::ModeDataType::Frequency)>>> frequency;
+      for (auto& qpoint_data : Input_.QpointData)
       {
-        qpoint.emplace_back(qpoint_data.QPoint);
+        qpoint.emplace_back(qpoint_data.Qpoint);
         frequency.emplace_back();
         for (auto& mode_data : qpoint_data.ModeData)
           frequency.back().emplace_back(mode_data.Frequency);
@@ -339,7 +339,7 @@ namespace ufo
       std::clog << "Done." << std::endl;
     }
     std::clog << "Writing output... " << std::flush;
-    Output_->write(Input_.QPointDataOutputFile);
+    Output_->write(Input_.QpointDataOutputFile);
     std::clog << "Done." << std::endl;
     return *this;
   }
@@ -380,7 +380,7 @@ namespace ufo
   (
     const BasisType& basis,
     const std::vector<std::reference_wrapper<const decltype
-      (InputType::QPointDataType::ModeDataType::AtomMovement)>>& mode_data,
+      (InputType::QpointDataType::ModeDataType::AtomMovement)>>& mode_data,
     std::atomic<unsigned>& number_of_finished_modes
   )
   {
@@ -418,16 +418,16 @@ namespace ufo
     const decltype(InputType::SuperCellMultiplier)& super_cell_multiplier,
     const decltype(InputType::SuperCellDeformation)& super_cell_deformation,
     const std::vector<std::reference_wrapper<const decltype
-      (InputType::QPointDataType::QPoint)>>& qpoint,
+      (InputType::QpointDataType::Qpoint)>>& qpoint,
     const std::vector<std::vector<std::reference_wrapper<const decltype
-      (InputType::QPointDataType::ModeDataType::Frequency)>>>& frequency,
+      (InputType::QpointDataType::ModeDataType::Frequency)>>>& frequency,
     const ProjectionCoefficientType_& projection_coefficient
   )
   {
     OutputType output;
     for (unsigned i_of_qpoint = 0, num_of_mode_manipulated = 0; i_of_qpoint < qpoint.size(); i_of_qpoint++)
     {
-      // 当 SuperCellDeformation 不是单位矩阵时, input.QPointData[i_of_qpoint].QPoint 不一定在 reciprocal_primative_cell 中
+      // 当 SuperCellDeformation 不是单位矩阵时, input.QpointData[i_of_qpoint].Qpoint 不一定在 reciprocal_primative_cell 中
       // 需要首先将 q 点平移数个周期, 进入不包含 SuperCellDeformation 的超胞 (称为 ModifiedSupreCell) 的倒格子中
       auto qpoint_by_reciprocal_modified_super_cell_in_reciprocal_modified_super_cell
         = !super_cell_deformation ? qpoint[i_of_qpoint].get() : [&]
@@ -483,7 +483,7 @@ namespace ufo
       for (auto [xyz_of_diff_of_sub_qpoint_by_reciprocal_modified_super_cell, i_of_sub_qpoint]
         : triplet_sequence(super_cell_multiplier))
       {
-        auto& _ = output.QPointData.emplace_back();
+        auto& _ = output.QpointData.emplace_back();
         /*
           SubQpointByReciprocalModifiedSuperCell = XyzOfDiffOfSubQpointByReciprocalModifiedSuperCell +
             QpointInReciprocalModifiedSuperCellByReciprocalModifiedSuperCell;
@@ -497,7 +497,7 @@ namespace ufo
             (XyzOfDiffOfSubQpointByReciprocalModifiedSuperCell +
             QpointInReciprocalModifiedSuperCellByReciprocalModifiedSuperCell);
         */
-        _.QPoint = super_cell_multiplier.cast<double>().cwiseInverse().asDiagonal()
+        _.Qpoint = super_cell_multiplier.cast<double>().cwiseInverse().asDiagonal()
           * (xyz_of_diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>()
             + qpoint_by_reciprocal_modified_super_cell_in_reciprocal_modified_super_cell);
         _.Source = qpoint[i_of_qpoint];

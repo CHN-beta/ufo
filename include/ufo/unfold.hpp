@@ -41,16 +41,16 @@ namespace ufo
 
         // 从哪个文件读入 AtomPosition, 以及这个文件的格式, 格式可选值包括 "yaml"
         InputOutputFile AtomPositionInputFile;
-        // 从哪个文件读入 QPointData, 以及这个文件的格式, 格式可选值包括 "yaml" 和 "hdf5"
-        InputOutputFile QPointDataInputFile;
+        // 从哪个文件读入 QpointData, 以及这个文件的格式, 格式可选值包括 "yaml" 和 "hdf5"
+        InputOutputFile QpointDataInputFile;
 
         // 超胞中原子的坐标，每行表示一个原子的坐标，单位为埃
         Eigen::MatrixX3d AtomPosition;
         // 关于各个 Q 点的数据
-        struct QPointDataType
+        struct QpointDataType
         {
           // Q 点的坐标，单位为超胞的倒格矢
-          Eigen::Vector3d QPoint;
+          Eigen::Vector3d Qpoint;
 
           // 关于这个 Q 点上各个模式的数据
           struct ModeDataType
@@ -65,14 +65,14 @@ namespace ufo
           };
           std::vector<ModeDataType> ModeData;
         };
-        std::vector<QPointDataType> QPointData;
+        std::vector<QpointDataType> QpointData;
 
         // 输出到哪些文件, 以及使用怎样的格式, 格式可选值包括:
         // yaml: 使用 yaml 格式输出
         // yaml-human-readable: 使用 yaml 格式输出, 但是输出的结果更适合人类阅读,
         //  包括合并相近的模式, 去除权重过小的模式, 限制输出的小数位数.
         // zpp: 使用 zpp-bits 序列化, 可以直接被 plot.cpp 读取
-        std::vector<InputOutputFile> QPointDataOutputFile;
+        std::vector<InputOutputFile> QpointDataOutputFile;
 
         // 从文件中读取输入 (包括一个较小的配置文件, 和一个 hdf5 或者一个 yaml 文件), 文件中应当包含:
         // 单胞的格矢: PrimativeCell 单位为埃 直接从 phonopy 的输出中复制
@@ -90,10 +90,10 @@ namespace ufo
       struct OutputType
       {
         // 关于各个 Q 点的数据
-        struct QPointDataType
+        struct QpointDataType
         {
           // Q 点的坐标，单位为单胞的倒格矢
-          Eigen::Vector3d QPoint;
+          Eigen::Vector3d Qpoint;
 
           // 来源于哪个 Q 点, 单位为超胞的倒格矢
           Eigen::Vector3d Source;
@@ -109,9 +109,9 @@ namespace ufo
           };
           std::vector<ModeDataType> ModeData;
         };
-        std::vector<QPointDataType> QPointData;
+        std::vector<QpointDataType> QpointData;
 
-        void write(decltype(InputType::QPointDataOutputFile) output_files) const;
+        void write(decltype(InputType::QpointDataOutputFile) output_files) const;
         void write(std::string filename, std::string format, unsigned percision = 10) const;
 
         using serialize = zpp::bits::members<1>;
@@ -153,7 +153,7 @@ namespace ufo
       (
         const BasisType& basis,
         const std::vector<std::reference_wrapper<const decltype
-          (InputType::QPointDataType::ModeDataType::AtomMovement)>>& mode_data,
+          (InputType::QpointDataType::ModeDataType::AtomMovement)>>& mode_data,
         std::atomic<unsigned>& number_of_finished_modes
       );
 
@@ -162,9 +162,9 @@ namespace ufo
         const decltype(InputType::SuperCellMultiplier)& super_cell_multiplier,
         const decltype(InputType::SuperCellDeformation)& super_cell_deformation,
         const std::vector<std::reference_wrapper<const decltype
-          (InputType::QPointDataType::QPoint)>>& qpoint,
+          (InputType::QpointDataType::Qpoint)>>& qpoint,
         const std::vector<std::vector<std::reference_wrapper<const decltype
-          (InputType::QPointDataType::ModeDataType::Frequency)>>>& frequency,
+          (InputType::QpointDataType::ModeDataType::Frequency)>>>& frequency,
         const ProjectionCoefficientType_& projection_coefficient
       );
   };

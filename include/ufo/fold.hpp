@@ -8,7 +8,6 @@ namespace ufo
     public:
       struct InputType
       {
-        Eigen::Matrix3d PrimativeCell;
         Eigen::Vector<unsigned, 3> SuperCellMultiplier;
         std::optional<Eigen::Matrix<double, 3, 3>> SuperCellDeformation;
         std::vector<Eigen::Vector3d> Qpoints;
@@ -18,7 +17,7 @@ namespace ufo
       };
       struct OutputType
       {
-        std::vector<Eigen::Vector3d> QPoints;
+        std::vector<Eigen::Vector3d> Qpoints;
         void write(std::string filename) const;
       };
     protected:
@@ -27,7 +26,12 @@ namespace ufo
     public:
       FoldSolver(std::string config_file);
       FoldSolver& operator()() override;
-      static Eigen::Vector3d fold(Eigen::Vector3d qpoint, Eigen::Vector<unsigned, 3> super_cell_multiplier,
-        std::optional<Eigen::Matrix<double, 3, 3>> super_cell_deformation);
+      // return value: QpointInReciprocalSuperCellByReciprocalSuperCell
+      static Eigen::Vector3d fold
+      (
+        Eigen::Vector3d qpoint_in_reciprocal_primitive_cell_by_reciprocal_primitive_cell,
+        Eigen::Vector<unsigned, 3> super_cell_multiplier,
+        std::optional<Eigen::Matrix<double, 3, 3>> super_cell_deformation
+      );
   };
 }

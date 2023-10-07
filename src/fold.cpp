@@ -6,9 +6,6 @@ namespace ufo
   {
     auto input = YAML::LoadFile(config_file);
     for (unsigned i = 0; i < 3; i++)
-      for (unsigned j = 0; j < 3; j++)
-        PrimativeCell(i, j) = input["PrimativeCell"][i][j].as<double>();
-    for (unsigned i = 0; i < 3; i++)
       SuperCellMultiplier(i) = input["SuperCellMultiplier"][i].as<unsigned>();
     if (input["SuperCellDeformation"])
     {
@@ -27,8 +24,8 @@ namespace ufo
     std::ofstream(filename) << [&]
     {
       std::stringstream print;
-      print << "QPoints:\n";
-      for (auto& qpoint : QPoints)
+      print << "Qpoints:\n";
+      for (auto& qpoint : Qpoints)
         print << fmt::format("  - [ {:.8f}, {:.8f}, {:.8f} ]\n", qpoint(0), qpoint(1), qpoint(2));
       return print.str();
     }();
@@ -41,7 +38,7 @@ namespace ufo
     {
       Output_.emplace();
       for (auto& qpoint : Input_.Qpoints)
-        Output_->QPoints.push_back(fold
+        Output_->Qpoints.push_back(fold
         (
           qpoint, Input_.SuperCellMultiplier,
           Input_.SuperCellDeformation
@@ -53,13 +50,15 @@ namespace ufo
 
   Eigen::Vector3d FoldSolver::fold
   (
-    Eigen::Vector3d qpoint, Eigen::Vector<unsigned, 3> super_cell_multiplier,
+    Eigen::Vector3d qpoint_in_reciprocal_primitive_cell_by_reciprocal_primitive_cell,
+    Eigen::Vector<unsigned, 3> super_cell_multiplier,
     std::optional<Eigen::Matrix<double, 3, 3>> super_cell_deformation
   )
   {
-    // 首先需要将 q 点转移到超胞的倒格子中
+    // 首先需要将 q 点转移到 ModifiedSuperCell 的倒格子中
     // 将 q 点坐标扩大, 然后取小数部分, 就可以了
-    auto qpoint_by_reciprocal_modified_super_cell = super_cell_multiplier.cast<double>().asDiagonal() * qpoint;
+    auto qpoint_by_reciprocal_modified_super_cell = super_cell_multiplier.cast<double>().asDiagonal()
+      * qpoint_in_reciprocal_primitive_cell_by_reciprocal_primitive_cell;
     auto qpoint_in_reciprocal_modified_super_cell_by_reciprocal_modified_super_cell =
       (qpoint_by_reciprocal_modified_super_cell.array() - qpoint_by_reciprocal_modified_super_cell.array().floor())
         .matrix();
