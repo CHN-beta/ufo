@@ -12,3 +12,7 @@ test/*
 !test/14.2.2.5.plot.yaml
 !test/14.2.4.4.unfold.yaml
 !test/14.2.4.4.plot.yaml
+!test/14.2.5.5.unfold.yaml
+!test/14.2.5.5.plot.yaml
+!test/14.2.6.4.unfold.yaml
+!test/14.2.6.4.plot.yaml

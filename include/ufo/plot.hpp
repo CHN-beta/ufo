@@ -36,17 +36,17 @@ namespace ufo
       PlotSolver& operator()() override;
 
       // 根据 q 点路径, 搜索要使用的 q 点
-      static std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QPointDataType>> search_qpoints
+      static std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>> search_qpoints
       (
         const std::pair<Eigen::Vector3d, Eigen::Vector3d>& path,
-        const decltype(InputType::SourceType::QPointData)& available_qpoints,
+        const decltype(InputType::SourceType::QpointData)& available_qpoints,
         double threshold, bool exclude_endpoint = false
       );
       // 根据搜索到的 q 点, 计算每个点的数值
       static std::vector<std::vector<double>> calculate_values
       (
         const std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>& path,
-        const std::vector<std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QPointDataType>>>& qpoints,
+        const std::vector<std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>>>& qpoints,
         const decltype(InputType::FigureConfigType::Resolution)& resolution,
         const decltype(InputType::FigureConfigType::Range)& range
       );

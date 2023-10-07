@@ -58,7 +58,7 @@ namespace ufo
     for (auto& figure : Input_.Figures)
     {
       // 外层表示不同的线段的端点，内层表示这个线段上的 q 点
-      std::vector<std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QPointDataType>>> qpoints;
+      std::vector<std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>>> qpoints;
       std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> lines;
       for (auto& path : figure.Qpoints)
         for (unsigned i = 0; i < path.size() - 1; i++)
@@ -66,7 +66,7 @@ namespace ufo
           lines.emplace_back(path[i], path[i + 1]);
           qpoints.push_back(search_qpoints
           (
-            lines.back(), Input_.Source.QPointData,
+            lines.back(), Input_.Source.QpointData,
             0.001, i != path.size() - 2
           ));
         }
@@ -76,27 +76,27 @@ namespace ufo
     return *this;
   }
 
-  std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QPointDataType>> PlotSolver::search_qpoints
+  std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>> PlotSolver::search_qpoints
   (
     const std::pair<Eigen::Vector3d, Eigen::Vector3d>& path,
-    const decltype(InputType::SourceType::QPointData)& available_qpoints,
+    const decltype(InputType::SourceType::QpointData)& available_qpoints,
     double threshold, bool exclude_endpoint
   )
   {
-    std::multimap<double, std::reference_wrapper<const UnfoldSolver::OutputType::QPointDataType>> selected_qpoints;
+    std::multimap<double, std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>> selected_qpoints;
     // 对于 output 中的每一个点, 检查这个点是否在路径上. 如果在, 把它加入到 selected_qpoints 中
     for (auto& qpoint : available_qpoints)
     {
       // 计算三点围成的三角形的面积的两倍
-      auto area = (path.second - path.first).cross(qpoint.QPoint - path.first).norm();
+      auto area = (path.second - path.first).cross(qpoint.Qpoint - path.first).norm();
       // 计算这个点到前两个点所在直线的距离
       auto distance = area / (path.second - path.first).norm();
       // 如果这个点到前两个点所在直线的距离小于阈值, 则认为这个点在路径上
       if (distance < threshold)
       {
         // 计算这个点到前两个点的距离, 两个距离都应该小于两点之间的距离
-        auto distance1 = (qpoint.QPoint - path.first).norm();
-        auto distance2 = (qpoint.QPoint - path.second).norm();
+        auto distance1 = (qpoint.Qpoint - path.first).norm();
+        auto distance2 = (qpoint.Qpoint - path.second).norm();
         auto distance3 = (path.second - path.first).norm();
         if (distance1 < distance3 + threshold && distance2 < distance3 + threshold)
           // 如果这个点不在终点处, 或者不排除终点, 则加入
@@ -117,7 +117,7 @@ namespace ufo
     }
     if (selected_qpoints.empty())
       throw std::runtime_error("No q points found");
-    std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QPointDataType>> result;
+    std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>> result;
     for (auto& qpoint : selected_qpoints)
       result.push_back(qpoint.second);
     return result;
@@ -126,18 +126,18 @@ namespace ufo
   std::vector<std::vector<double>> PlotSolver::calculate_values
   (
     const std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>& path,
-    const std::vector<std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QPointDataType>>>& qpoints,
+    const std::vector<std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>>>& qpoints,
     const decltype(InputType::FigureConfigType::Resolution)& resolution,
     const decltype(InputType::FigureConfigType::Range)& range
   )
   {
     // 整理输入
-    std::map<double, std::reference_wrapper<const UnfoldSolver::OutputType::QPointDataType>> qpoints_with_distance;
+    std::map<double, std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>> qpoints_with_distance;
     double total_distance = 0;
     for (unsigned i = 0; i < path.size(); i++)
     {
       for (auto& _ : qpoints[i])
-        qpoints_with_distance.emplace(total_distance + (_.get().QPoint - path[i].first).norm(), _);
+        qpoints_with_distance.emplace(total_distance + (_.get().Qpoint - path[i].first).norm(), _);
       total_distance += (path[i].second - path[i].first).norm();
     }
 
@@ -145,8 +145,8 @@ namespace ufo
     std::vector<std::vector<double>> values;
     auto blend = []
     (
-      const UnfoldSolver::OutputType::QPointDataType& a,
-      const UnfoldSolver::OutputType::QPointDataType& b,
+      const UnfoldSolver::OutputType::QpointDataType& a,
+      const UnfoldSolver::OutputType::QpointDataType& b,
       double ratio, unsigned resolution, std::pair<double, double> range
     ) -> std::vector<double>
     {
