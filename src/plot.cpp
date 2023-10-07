@@ -74,7 +74,10 @@ namespace ufo
         }
       auto [values, x_ticks] = calculate_values
         (lines, qpoints, figure.Resolution, figure.Range);
-      plot(values, figure.Filename, x_ticks, figure.YTicks.value_or(std::vector<double>{}));
+      auto y_ticks = figure.YTicks.value_or(std::vector<double>{});
+      for (auto& _ : y_ticks)
+        _ = _ / (figure.Range.second - figure.Range.first) * figure.Resolution.second;
+      plot(values, figure.Filename, x_ticks, y_ticks);
     }
     return *this;
   }
@@ -203,26 +206,27 @@ namespace ufo
     std::vector<std::vector<double>>
       r(values[0].size(), std::vector<double>(values.size(), 0)),
       g(values[0].size(), std::vector<double>(values.size(), 0)),
-      b(values[0].size(), std::vector<double>(values.size(), 0));
+      b(values[0].size(), std::vector<double>(values.size(), 0)),
+      a(values[0].size(), std::vector<double>(values.size(), 0));
     for (unsigned i = 0; i < values[0].size(); i++)
       for (unsigned j = 0; j < values.size(); j++)
       {
         r[i][j] = 255;
-        g[i][j] = 255 - values[j][i] * 2 * 255;
-        if (g[i][j] < 0)
-          g[i][j] = 0;
-        b[i][j] = 255 - values[j][i] * 2 * 255;
-        if (b[i][j] < 0)
-          b[i][j] = 0;
+        g[i][j] = 0;
+        b[i][j] = 0;
+        a[i][j] = values[j][i] * 2 * 255;
+        if (a[i][j] > 255)
+          a[i][j] = 255;
       }
     auto f = matplot::figure(true);
     auto ax = f->current_axes();
-    ax->image(std::tie(r, g, b));
+    auto image = ax->image(std::tie(r, g, b));
+    image->matrix_a(a);
     ax->y_axis().reverse(false);
-    ax->y_axis().ticklabels({});
-    ax->y_axis().tick_values(y_ticks);
-    ax->x_axis().ticklabels({});
     ax->x_axis().tick_values(x_ticks);
+    ax->x_axis().tick_length(1);
+    ax->y_axis().tick_values(y_ticks);
+    ax->y_axis().tick_length(1);
     f->save(filename);
   }
 }
