@@ -12,3 +12,4 @@ Figures:
   Resolution: [ 1024, 400 ]
   Range: [ -5, 35 ]
   Filename: ./test/14.2.6.4.png
+  YTicks: [ 0, 5, 10, 15, 20, 25, 30 ]

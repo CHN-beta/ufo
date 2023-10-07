@@ -16,6 +16,7 @@ namespace ufo
           std::pair<unsigned, unsigned> Resolution;
           std::pair<double, double> Range;
           std::string Filename;
+          std::optional<std::vector<double>> YTicks;
         };
         std::vector<FigureConfigType> Figures;
 
@@ -43,7 +44,7 @@ namespace ufo
         double threshold, bool exclude_endpoint = false
       );
       // 根据搜索到的 q 点, 计算每个点的数值
-      static std::vector<std::vector<double>> calculate_values
+      static std::tuple<std::vector<std::vector<double>>, std::vector<double>> calculate_values
       (
         const std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>& path,
         const std::vector<std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>>>& qpoints,
@@ -54,7 +55,8 @@ namespace ufo
       static void plot
       (
         const std::vector<std::vector<double>>& values,
-        const decltype(InputType::FigureConfigType::Filename)& filename
+        const decltype(InputType::FigureConfigType::Filename)& filename,
+        const std::vector<double>& x_ticks, const std::vector<double>& y_ticks
       );
   };
 }
