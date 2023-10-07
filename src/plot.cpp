@@ -46,6 +46,8 @@ namespace ufo
       Figures.back().Resolution = figure["Resolution"].as<std::pair<unsigned, unsigned>>();
       Figures.back().Range = figure["Range"].as<std::pair<double, double>>();
       Figures.back().Filename = figure["Filename"].as<std::string>();
+      if (figure["YTicks"])
+        Figures.back().YTicks = figure["YTicks"].as<std::vector<double>>();
     }
     SourceFilename = input["SourceFilename"].as<std::string>();
     Source = SourceType(SourceFilename);
@@ -70,8 +72,9 @@ namespace ufo
             0.001, i != path.size() - 2
           ));
         }
-      auto values = calculate_values(lines, qpoints, figure.Resolution, figure.Range);
-      plot(values, figure.Filename);
+      auto [values, x_ticks] = calculate_values
+        (lines, qpoints, figure.Resolution, figure.Range);
+      plot(values, figure.Filename, x_ticks, figure.YTicks.value_or(std::vector<double>{}));
     }
     return *this;
   }
@@ -123,7 +126,7 @@ namespace ufo
     return result;
   }
 
-  std::vector<std::vector<double>> PlotSolver::calculate_values
+  std::tuple<std::vector<std::vector<double>>, std::vector<double>> PlotSolver::calculate_values
   (
     const std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>& path,
     const std::vector<std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>>>& qpoints,
@@ -134,12 +137,17 @@ namespace ufo
     // 整理输入
     std::map<double, std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>> qpoints_with_distance;
     double total_distance = 0;
+    std::vector<double> x_ticks;
     for (unsigned i = 0; i < path.size(); i++)
     {
       for (auto& _ : qpoints[i])
         qpoints_with_distance.emplace(total_distance + (_.get().Qpoint - path[i].first).norm(), _);
       total_distance += (path[i].second - path[i].first).norm();
+      if (i != path.size() - 1)
+        x_ticks.push_back(total_distance);
     }
+    for (auto& _ : x_ticks)
+      _ = _ / total_distance * resolution.first;
 
     // 插值
     std::vector<std::vector<double>> values;
@@ -183,12 +191,13 @@ namespace ufo
           resolution.second, range)
         );
     }
-    return values;
+    return {values, x_ticks};
   }
   void PlotSolver::plot
   (
     const std::vector<std::vector<double>>& values,
-    const decltype(InputType::FigureConfigType::Filename)& filename
+    const decltype(InputType::FigureConfigType::Filename)& filename,
+    const std::vector<double>& x_ticks, const std::vector<double>& y_ticks
   )
   {
     std::vector<std::vector<double>>
@@ -210,6 +219,10 @@ namespace ufo
     auto ax = f->current_axes();
     ax->image(std::tie(r, g, b));
     ax->y_axis().reverse(false);
+    ax->y_axis().ticklabels({});
+    ax->y_axis().tick_values(y_ticks);
+    ax->x_axis().ticklabels({});
+    ax->x_axis().tick_values(x_ticks);
     f->save(filename);
   }
 }
