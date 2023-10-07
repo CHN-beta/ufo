@@ -73,10 +73,10 @@ namespace ufo
           ));
         }
       auto [values, x_ticks] = calculate_values
-        (lines, qpoints, figure.Resolution, figure.Range);
+        (Input_.PrimativeCell, lines, qpoints, figure.Resolution, figure.Range);
       auto y_ticks = figure.YTicks.value_or(std::vector<double>{});
       for (auto& _ : y_ticks)
-        _ = _ / (figure.Range.second - figure.Range.first) * figure.Resolution.second;
+        _ = (_ - figure.Range.first) / (figure.Range.second - figure.Range.first) * figure.Resolution.second;
       plot(values, figure.Filename, x_ticks, y_ticks);
     }
     return *this;
@@ -131,6 +131,7 @@ namespace ufo
 
   std::tuple<std::vector<std::vector<double>>, std::vector<double>> PlotSolver::calculate_values
   (
+    const Eigen::Matrix3d primative_cell,
     const std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>>& path,
     const std::vector<std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>>>& qpoints,
     const decltype(InputType::FigureConfigType::Resolution)& resolution,
@@ -144,8 +145,13 @@ namespace ufo
     for (unsigned i = 0; i < path.size(); i++)
     {
       for (auto& _ : qpoints[i])
-        qpoints_with_distance.emplace(total_distance + (_.get().Qpoint - path[i].first).norm(), _);
-      total_distance += (path[i].second - path[i].first).norm();
+        qpoints_with_distance.emplace
+        (
+          total_distance
+            + ((_.get().Qpoint - path[i].first).transpose() * primative_cell.inverse().transpose()).norm(),
+          _
+        );
+      total_distance += ((path[i].second - path[i].first).transpose() * primative_cell.inverse().transpose()).norm();
       if (i != path.size() - 1)
         x_ticks.push_back(total_distance);
     }
