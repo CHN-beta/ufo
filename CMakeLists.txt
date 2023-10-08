@@ -19,13 +19,16 @@ find_package(fmt REQUIRED)
 find_package(concurrencpp REQUIRED)
 find_package(HighFive REQUIRED)
 find_package(TBB REQUIRED)
+find_package(glad REQUIRED)
+# find_package(Matplot++ REQUIRED COMPONENTS matplot_opengl)
 find_package(Matplot++ REQUIRED)
 find_path(ZPP_BITS_INCLUDE_DIR zpp_bits.h REQUIRED)
 
 add_executable(ufo src/fold.cpp src/unfold.cpp src/plot.cpp src/main.cpp)
 target_include_directories(ufo PRIVATE ${PROJECT_SOURCE_DIR}/include ${ZPP_BITS_INCLUDE_DIR})
 target_link_libraries(ufo PRIVATE
-  yaml-cpp Eigen3::Eigen fmt::fmt concurrencpp::concurrencpp HighFive_HighFive TBB::tbb Matplot++::matplot)
+  yaml-cpp Eigen3::Eigen fmt::fmt concurrencpp::concurrencpp HighFive_HighFive TBB::tbb Matplot++::matplot
+  Matplot++::matplot_opengl)
 # target_compile_definitions(ufo PRIVATE $<$<CONFIG:Debug>:_GLIBCXX_DEBUG>)
 
 get_property(ImportedTargets DIRECTORY "${CMAKE_SOURCE_DIR}" PROPERTY IMPORTED_TARGETS)
