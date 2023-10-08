@@ -217,14 +217,18 @@ namespace ufo
     for (unsigned i = 0; i < values[0].size(); i++)
       for (unsigned j = 0; j < values.size(); j++)
       {
-        r[i][j] = 255;
-        g[i][j] = 0;
-        b[i][j] = 0;
-        a[i][j] = values[j][i] * 2 * 255;
+        a[i][j] = values[j][i] * 100 * 255;
         if (a[i][j] > 255)
           a[i][j] = 255;
+        r[i][j] = 255;
+        g[i][j] = 255 - values[j][i] * 2 * 255;
+        if (g[i][j] < 0)
+          g[i][j] = 0;
+        b[i][j] = 255 - values[j][i] * 2 * 255;
+        if (b[i][j] < 0)
+          b[i][j] = 0;
       }
-    auto f = matplot::figure(true);
+    auto f = matplot::figure<matplot::backend::gnuplot>(true);
     auto ax = f->current_axes();
     auto image = ax->image(std::tie(r, g, b));
     image->matrix_a(a);
@@ -233,6 +237,6 @@ namespace ufo
     ax->x_axis().tick_length(1);
     ax->y_axis().tick_values(y_ticks);
     ax->y_axis().tick_length(1);
-    f->save(filename);
+    f->save(filename, "png");
   }
 }

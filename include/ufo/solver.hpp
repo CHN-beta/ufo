@@ -22,6 +22,7 @@
 # include <highfive/H5File.hpp>
 # include <zpp_bits.h>
 # include <matplot/matplot.h>
+# include <matplot/backend/opengl.h>
 
 // 在相位中, 约定为使用 $\exp (2 \pi i \vec{q} \cdot \vec{r})$ 来表示原子的运动状态
 //  (而不是 $\exp (-2 \pi i \vec{q} \cdot \vec{r})$)
