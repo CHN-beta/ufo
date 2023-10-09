@@ -15,8 +15,11 @@ namespace ufo
           std::vector<std::vector<Eigen::Vector3d>> Qpoints;
           std::pair<unsigned, unsigned> Resolution;
           std::pair<double, double> Range;
-          std::string Filename;
           std::optional<std::vector<double>> YTicks;
+          std::string PictureFilename;
+          
+          struct DataFileType { std::string Filename, Format; };
+          std::optional<std::vector<DataFileType>> DataFiles;
         };
         std::vector<FigureConfigType> Figures;
 
@@ -30,8 +33,21 @@ namespace ufo
 
         InputType(std::string config_file);
       };
+      struct OutputType
+      {
+        std::vector<std::vector<double>> Values;
+        std::vector<double> XTicks;
+        std::vector<double> YTicks;
+        std::pair<unsigned, unsigned> Resolution;
+        std::pair<double, double> Range;
+
+        OutputType() = default;
+        const OutputType& write(std::string filename, std::string format) const;
+        using serialize = zpp::bits::members<5>;
+      };
     protected:
       InputType Input_;
+      std::optional<std::vector<OutputType>> Output_;
     public:
       PlotSolver(std::string config_file);
       PlotSolver& operator()() override;
@@ -56,7 +72,7 @@ namespace ufo
       static void plot
       (
         const std::vector<std::vector<double>>& values,
-        const decltype(InputType::FigureConfigType::Filename)& filename,
+        const std::string& filename,
         const std::vector<double>& x_ticks, const std::vector<double>& y_ticks
       );
   };
