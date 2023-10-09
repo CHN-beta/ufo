@@ -40,7 +40,8 @@ namespace ufo
       for (auto& qpoint : Input_.Qpoints)
         Output_->Qpoints.push_back(fold
         (
-          qpoint, Input_.SuperCellMultiplier,
+          qpoint,
+          Input_.SuperCellMultiplier,
           Input_.SuperCellDeformation
         ));
     }

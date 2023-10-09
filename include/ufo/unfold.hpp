@@ -133,6 +133,10 @@ namespace ufo
       UnfoldSolver(std::string config_file);
       UnfoldSolver& operator()() override;
 
+      // 分解 SuperCellMultiplier
+      static std::tuple<Eigen::Matrix3i, Eigen::Vector3i> decompose_super_cell_multiplier
+        (Eigen::Matrix3i super_cell_multiplier);
+
       // 构建基
       // 每个 q 点对应的一组 sub qpoint。不同的 q 点所对应的 sub qpoint 是不一样的，但 sub qpoint 与 q 点的相对位置一致。
       // 这里 xyz_of_diff_of_sub_qpoint 即表示这个相对位置。

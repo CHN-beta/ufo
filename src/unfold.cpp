@@ -325,6 +325,47 @@ namespace ufo
     return *this;
   }
 
+  std::tuple<Eigen::Matrix3i, Eigen::Vector3i> UnfoldSolver::decompose_super_cell_multiplier
+    (Eigen::Matrix3i super_cell_multiplier)
+  {
+    struct
+    {
+      Eigen::Matrix3i SuperCellDeformation = Eigen::Matrix3i::Identity();
+      Eigen::Vector3i SuperCellSizeMultiplier;
+    } result;
+    // 生成交换两行的初等矩阵
+    auto elementary_exchange = [](int nrow1, int nrow2) -> Eigen::Matrix3i
+    {
+      Eigen::Matrix3i result = Eigen::Matrix3i::Identity();
+      result.row(nrow1).swap(result.row(nrow2));
+      return result;
+    };
+    // 生成将一行乘以一个整数加到另一行的初等矩阵及其逆矩阵
+    auto elementary_add = [](int nrow1, int nrow2, int multiplier)
+      -> std::pair<Eigen::Matrix3i, Eigen::Matrix3i>
+    {
+      Eigen::Matrix3i result1 = Eigen::Matrix3i::Identity(), result2 = Eigen::Matrix3i::Identity();
+      result1(nrow2, nrow1) = multiplier;
+      result2(nrow2, nrow1) = -multiplier;
+      return { result1, result2 };
+    };
+    for (int ncol = 0; ncol < 2; ncol++)
+      while (true)
+      {
+        // 将第 ncol 列从第 ncol 列开始绝对值最小的非零值调整到第 ncol 行
+        for (int nrow = ncol + 1; nrow < 3; nrow++)
+          if (std::abs(super_cell_multiplier(nrow, ncol)) < std::abs(super_cell_multiplier(ncol, ncol)))
+          {
+            super_cell_multiplier.row(ncol).swap(super_cell_multiplier.row(nrow));
+            result.SuperCellDeformation.col(ncol).swap(result.SuperCellDeformation.col(nrow));
+          }
+        // 如果第 ncol 列第 ncol + 1 行开始的元素为零, 则退出循环
+        if (super_cell_multiplier.block(ncol + 1, ncol, 2 - ncol, 1).isZero())
+          break;
+        // 尝试用
+      }
+  }
+
   UnfoldSolver::BasisType UnfoldSolver::construct_basis
   (
     const decltype(InputType::PrimativeCell)& primative_cell,
