@@ -96,6 +96,21 @@ namespace ufo
       auto y_ticks = figure.YTicks.value_or(std::vector<double>{});
       for (auto& _ : y_ticks)
         _ = (_ - figure.Range.first) / (figure.Range.second - figure.Range.first) * figure.Resolution.second;
+
+      // if subtract.zpp exists, subtract it from values
+      if (std::filesystem::exists("subtract.zpp"))
+      {
+        std::cout << "found subtract.zpp, subtracting it from values" << std::endl;
+        auto subtract = zpp_read<OutputType>("subtract.zpp");
+        for (unsigned i = 0; i < values.size(); i++)
+          for (unsigned j = 0; j < values[i].size(); j++)
+          {
+            values[i][j] -= subtract.Values[i][j];
+            if (values[i][j] < 0)
+              values[i][j] = 0;
+          }
+      }
+
       plot(values, figure.PictureFilename, x_ticks, y_ticks);
       Output_->emplace_back();
       Output_->back().Values = std::move(values);
