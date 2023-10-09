@@ -58,11 +58,13 @@ namespace ufo
       zpp_write(*this, filename);
     else if (format == "hdf5")
     {
+      std::vector resolution{ Resolution.first, Resolution.second };
+      std::vector range{ Range.first, Range.second };
       Hdf5File(filename).write(Values, "Values")
         .write(XTicks, "XTicks")
         .write(YTicks, "YTicks")
-        .write(Resolution, "Resolution")
-        .write(Range, "Range");
+        .write(resolution, "Resolution")
+        .write(range, "Range");
     }
     return *this;
   }
