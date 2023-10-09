@@ -133,14 +133,12 @@ namespace ufo
     }
     else if (QpointDataInputFile.Format == "hdf5")
     {
-      HighFive::File file(QpointDataInputFile.FileName, HighFive::File::ReadOnly);
-      auto size = file.getDataSet("/frequency").getDimensions();
-      auto frequency = file.getDataSet("/frequency")
-        .read<std::vector<std::vector<std::vector<double>>>>();
-      auto eigenvector_vector = file.getDataSet("/eigenvector")
-        .read<std::vector<std::vector<std::vector<std::vector<PhonopyComplex>>>>>();
-      auto path = file.getDataSet("/path")
-        .read<std::vector<std::vector<std::vector<double>>>>();
+      std::vector<std::vector<std::vector<double>>> frequency, path;
+      std::vector<std::vector<std::vector<std::vector<PhonopyComplex>>>> eigenvector_vector;
+      Hdf5File(QpointDataInputFile.FileName).read(frequency, "/frequency")
+        .read(eigenvector_vector, "/eigenvector")
+        .read(path, "/path");
+      std::vector size = { frequency.size(), frequency[0].size(), frequency[0][0].size() };
       QpointData.resize(size[0] * size[1]);
       for (unsigned i = 0; i < size[0]; i++)
         for (unsigned j = 0; j < size[1]; j++)
@@ -233,20 +231,10 @@ namespace ufo
       output.write(filename, "yaml", 3);
     }
     else if (format == "zpp")
-    {
-      auto [data, out] = zpp::bits::data_out();
-      out(*this).or_throw();
-      static_assert(sizeof(char) == sizeof(std::byte));
-      std::ofstream file(filename, std::ios::binary | std::ios::out);
-      file.exceptions(std::ios::badbit | std::ios::failbit);
-      file.write(reinterpret_cast<const char*>(data.data()), data.size());
-    }
+      zpp_write(*this, filename);
     else if (format == "hdf5")
     {
-      std::vector<std::vector<double>> Qpoint;
-      std::vector<std::vector<double>> Source;
-      std::vector<std::vector<double>> Frequency;
-      std::vector<std::vector<double>> Weight;
+      std::vector<std::vector<double>> Qpoint, Source, Frequency, Weight;
       for (auto& qpoint : QpointData)
       {
         Qpoint.emplace_back(qpoint.Qpoint.data(), qpoint.Qpoint.data() + 3);
@@ -259,17 +247,10 @@ namespace ufo
           Weight.back().push_back(mode.Weight);
         }
       }
-
-      HighFive::File file(filename,
-        HighFive::File::ReadWrite | HighFive::File::Create | HighFive::File::Truncate);
-      file.createDataSet<double>("Qpoint",
-        HighFive::DataSpace::From(Qpoint)).write(Qpoint);
-      file.createDataSet<double>("Source",
-        HighFive::DataSpace::From(Source)).write(Source);
-      file.createDataSet<double>("Frequency",
-        HighFive::DataSpace::From(Frequency)).write(Frequency);
-      file.createDataSet<double>("Weight",
-        HighFive::DataSpace::From(Weight)).write(Weight);
+      Hdf5File(filename).write(Qpoint, "/Qpoint")
+        .write(Source, "/Source")
+        .write(Frequency, "/Frequency")
+        .write(Weight, "/Weight");
     }
   }
 
