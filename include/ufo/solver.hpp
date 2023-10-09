@@ -116,7 +116,7 @@ namespace ufo
           }
           template <typename T> inline Hdf5File& write(const T& object, std::string name)
           {
-            File_.createDataSet(name, HighFive::DataSpace::From(object)).write(object);
+            File_.createDataSet(name, object);
             return *this;
           }
         protected:
