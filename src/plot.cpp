@@ -245,13 +245,16 @@ namespace ufo
     for (unsigned i = 0; i < values[0].size(); i++)
       for (unsigned j = 0; j < values.size(); j++)
       {
-        a[i][j] = values[j][i] * 100 * 255;
+        auto v = values[j][i];
+        if (v < 0.05)
+          v = 0;
+        a[i][j] = v * 100 * 255;
         if (a[i][j] > 255)
           a[i][j] = 255;
-        r[i][j] = 255 - values[j][i] * 2 * 255;
+        r[i][j] = 255 - v * 2 * 255;
         if (r[i][j] < 0)
           r[i][j] = 0;
-        g[i][j] = 255 - values[j][i] * 2 * 255;
+        g[i][j] = 255 - v * 2 * 255;
         if (g[i][j] < 0)
           g[i][j] = 0;
         b[i][j] = 255;
