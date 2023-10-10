@@ -248,13 +248,13 @@ namespace ufo
         a[i][j] = values[j][i] * 100 * 255;
         if (a[i][j] > 255)
           a[i][j] = 255;
-        r[i][j] = 255;
+        r[i][j] = 255 - values[j][i] * 2 * 255;
+        if (r[i][j] < 0)
+          r[i][j] = 0;
         g[i][j] = 255 - values[j][i] * 2 * 255;
         if (g[i][j] < 0)
           g[i][j] = 0;
-        b[i][j] = 255 - values[j][i] * 2 * 255;
-        if (b[i][j] < 0)
-          b[i][j] = 0;
+        b[i][j] = 255;
       }
     auto f = matplot::figure<matplot::backend::gnuplot>(true);
     auto ax = f->current_axes();
