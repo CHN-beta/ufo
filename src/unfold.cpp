@@ -395,7 +395,7 @@ namespace ufo
     std::transform
     (
       std::execution::par, mode_data.begin(), mode_data.end(),
-      projection_coefficient.begin(), [&](const auto& mode_data)
+      projection_coefficient.begin(), [&, &all_mode_data = mode_data](const auto& mode_data)
       {
         // 这里, mode_data 和 projection_coefficient 均指对应于一个模式的数据
         std::vector<double> projection_coefficient(basis.size());
@@ -414,7 +414,7 @@ namespace ufo
         // 如果有 PDOS 因子, 则将其乘到 projection_coefficient 上
         if (pdos_factor)
           for (auto& _ : projection_coefficient)
-            _ *= (*pdos_factor)[std::distance(&mode_data.get(), &mode_data.front())];
+            _ *= (*pdos_factor)[std::distance(&mode_data, &all_mode_data.front())];
         number_of_finished_modes++;
         return projection_coefficient;
       }
