@@ -62,10 +62,14 @@ namespace ufo
             // 这个数据可以认为是原子位移中, 关于超胞有周期性的那一部分, 再乘以原子质量的开方.
             // 这个数据在读入后会被立即归一化.
             Eigen::MatrixX3cd AtomMovement;
+
+            std::optional<double> PDosFactor;
           };
           std::vector<ModeDataType> ModeData;
         };
         std::vector<QpointDataType> QpointData;
+
+        std::optional<std::vector<unsigned>> SelectedAtoms;
 
         // 输出到哪些文件, 以及使用怎样的格式, 格式可选值包括:
         // yaml: 使用 yaml 格式输出
@@ -154,6 +158,7 @@ namespace ufo
         const BasisType& basis,
         const std::vector<std::reference_wrapper<const decltype
           (InputType::QpointDataType::ModeDataType::AtomMovement)>>& mode_data,
+        const std::optional<std::vector<double>>& pdos_factor,
         std::atomic<unsigned>& number_of_finished_modes
       );
 

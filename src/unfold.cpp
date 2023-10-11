@@ -25,6 +25,13 @@ namespace ufo
       for (unsigned i = 0; i < 3; i++)
         PrimativeCellBasisNumber(i) = node["PrimativeCellBasisNumber"][i].as<int>();
 
+      if (auto value = node["SelectedAtoms"])
+      {
+        SelectedAtoms.emplace();
+        for (unsigned i = 0; i < value.size(); i++)
+          (*SelectedAtoms)[i] = value[i].as<unsigned>();
+      }
+
       auto read_file_config = [filename](YAML::Node source, InputOutputFile& config)
       {
         if (auto _ = source["SameAsConfigFile"])
@@ -157,6 +164,14 @@ namespace ufo
           }
         }
     }
+    if (SelectedAtoms)
+      for (auto& qpoint_data : QpointData)
+        for (auto& mode_data : qpoint_data.ModeData)
+        {
+          mode_data.PDosFactor.emplace(0);
+          for (auto& atom : *SelectedAtoms)
+            *mode_data.PDosFactor += mode_data.AtomMovement.row(atom).array().abs2().sum();
+        }
   }
 
   void UnfoldSolver::OutputType::write
@@ -280,9 +295,17 @@ namespace ufo
       std::clog << "Calculating projection coefficient... " << std::flush;
       std::vector<std::reference_wrapper<const decltype
         (InputType::QpointDataType::ModeDataType::AtomMovement)>> mode_data;
+      std::optional<std::vector<double>> pdos_factor;
       for (auto& qpoint : Input_.QpointData)
         for (auto& mode : qpoint.ModeData)
           mode_data.emplace_back(mode.AtomMovement);
+      if (Input_.SelectedAtoms)
+      {
+        pdos_factor.emplace();
+        for (auto& qpoint : Input_.QpointData)
+          for (auto& mode : qpoint.ModeData)
+            pdos_factor->push_back(*mode.PDosFactor);
+      }
       std::atomic<unsigned> number_of_finished_modes(0);
       std::thread print_thread([&]
       {
@@ -296,7 +319,7 @@ namespace ufo
         }
       });
       auto projection_coefficient = construct_projection_coefficient
-        (*Basis_, mode_data, number_of_finished_modes);
+        (*Basis_, mode_data, pdos_factor, number_of_finished_modes);
       number_of_finished_modes = mode_data.size();
       print_thread.join();
       std::clog << "\33[2K\rCalculating projection coefficient... Done." << std::endl;
@@ -362,6 +385,7 @@ namespace ufo
     const BasisType& basis,
     const std::vector<std::reference_wrapper<const decltype
       (InputType::QpointDataType::ModeDataType::AtomMovement)>>& mode_data,
+    const std::optional<std::vector<double>>& pdos_factor,
     std::atomic<unsigned>& number_of_finished_modes
   )
   {
@@ -387,6 +411,10 @@ namespace ufo
           (projection_coefficient.begin(), projection_coefficient.end(), 0.);
         for (auto& _ : projection_coefficient)
           _ /= sum;
+        // 如果有 PDOS 因子, 则将其乘到 projection_coefficient 上
+        if (pdos_factor)
+          for (auto& _ : projection_coefficient)
+            _ *= (*pdos_factor)[std::distance(&mode_data.get(), &mode_data.front())];
         number_of_finished_modes++;
         return projection_coefficient;
       }
