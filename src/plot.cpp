@@ -2,7 +2,7 @@
 
 namespace ufo
 {
-  PlotSolver::InputType::SourceType::SourceType(std::string filename)
+  PlotSolver::InputType::UnfoldedDataType::UnfoldedDataType(std::string filename)
   {
     static_cast<UnfoldSolver::OutputType&>(*this) = zpp_read<UnfoldSolver::OutputType>(filename);
   }
@@ -49,8 +49,8 @@ namespace ufo
         }
       }
     }
-    SourceFilename = input["SourceFilename"].as<std::string>();
-    Source = SourceType(SourceFilename);
+    UnfoldedDataFilename = input["UnfoldedDataFilename"].as<std::string>();
+    UnfoldedData = UnfoldedDataType(UnfoldedDataFilename);
   }
   const PlotSolver::OutputType& PlotSolver::OutputType::write(std::string filename, std::string format) const
   {
@@ -85,7 +85,7 @@ namespace ufo
           lines.emplace_back(path[i], path[i + 1]);
           qpoints.push_back(search_qpoints
           (
-            lines.back(), Input_.Source.QpointData,
+            lines.back(), Input_.UnfoldedData.QpointData,
             0.001, i != path.size() - 2
           ));
         }
@@ -113,7 +113,7 @@ namespace ufo
   std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>> PlotSolver::search_qpoints
   (
     const std::pair<Eigen::Vector3d, Eigen::Vector3d>& path,
-    const decltype(InputType::SourceType::QpointData)& available_qpoints,
+    const decltype(InputType::UnfoldedDataType::QpointData)& available_qpoints,
     double threshold, bool exclude_endpoint
   )
   {
