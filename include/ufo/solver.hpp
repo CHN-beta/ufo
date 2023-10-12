@@ -121,6 +121,20 @@ namespace ufo
         protected:
           std::optional<HighFive::File> File_;
       };
+
+      struct DataFile
+      {
+        std::string Filename;
+        std::string Format;
+        std::map<std::string, std::any> ExtraParameters;
+        inline DataFile() = default;
+        DataFile
+        (
+          YAML::Node node, std::set<std::string> supported_format,
+          std::string config_file, bool allow_same_as_config_file = false
+        );
+      };
+
   };
 }
 

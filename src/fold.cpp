@@ -17,7 +17,7 @@ namespace ufo
     for (auto& qpoint : input["Qpoints"].as<std::vector<std::vector<double>>>())
       Qpoints.push_back(Eigen::Vector3d
         {{qpoint.at(0)}, {qpoint.at(1)}, {qpoint.at(2)}});
-    OutputFilename = input["OutputFilename"].as<std::string>();
+    OutputFile = DataFile(input["OutputFile"], {"yaml"}, config_file);
   }
   void FoldSolver::OutputType::write(std::string filename) const
   {
@@ -44,7 +44,7 @@ namespace ufo
           Input_.SuperCellDeformation
         ));
     }
-    Output_->write(Input_.OutputFilename);
+    Output_->write(Input_.OutputFile.Filename);
     return *this;
   }
 
