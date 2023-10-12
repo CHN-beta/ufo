@@ -23,13 +23,13 @@ namespace ufo
         };
         std::vector<FigureConfigType> Figures;
 
-        struct SourceType : public UnfoldSolver::OutputType
+        struct UnfoldedDataType : public UnfoldSolver::OutputType
         {
-          SourceType(std::string filename);
-          SourceType() = default;
+          UnfoldedDataType(std::string filename);
+          UnfoldedDataType() = default;
         };
-        std::string SourceFilename;
-        SourceType Source;
+        std::string UnfoldedDataFilename;
+        UnfoldedDataType UnfoldedData;
 
         InputType(std::string config_file);
       };
@@ -56,7 +56,7 @@ namespace ufo
       static std::vector<std::reference_wrapper<const UnfoldSolver::OutputType::QpointDataType>> search_qpoints
       (
         const std::pair<Eigen::Vector3d, Eigen::Vector3d>& path,
-        const decltype(InputType::SourceType::QpointData)& available_qpoints,
+        const decltype(InputType::UnfoldedDataType::QpointData)& available_qpoints,
         double threshold, bool exclude_endpoint = false
       );
       // 根据搜索到的 q 点, 计算每个点的数值
