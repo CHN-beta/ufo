@@ -104,23 +104,32 @@ namespace ufo
         return output;
       }
 
-      class Hdf5File
+      class Hdf5file
       {
         public:
-          inline Hdf5File(std::string filename) : File_(filename, HighFive::File::ReadWrite
-            | HighFive::File::Create | HighFive::File::Truncate) {}
-          template <typename T> inline Hdf5File& read(T& object, std::string name)
+          inline Hdf5file& open_for_read(std::string filename)
           {
-            object = File_.getDataSet(name).read<std::remove_cvref_t<decltype(object)>>();
+            File_ = HighFive::File(filename, HighFive::File::ReadOnly);
             return *this;
           }
-          template <typename T> inline Hdf5File& write(const T& object, std::string name)
+          inline Hdf5file& open_for_write(std::string filename)
           {
-            File_.createDataSet(name, object);
+            File_ = HighFive::File(filename, HighFive::File::ReadWrite | HighFive::File::Create
+              | HighFive::File::Truncate);
+            return *this;
+          }
+          template <typename T> inline Hdf5file& read(T& object, std::string name)
+          {
+            object = File_->getDataSet(name).read<std::remove_cvref_t<decltype(object)>>();
+            return *this;
+          }
+          template <typename T> inline Hdf5file& write(const T& object, std::string name)
+          {
+            File_->createDataSet(name, object);
             return *this;
           }
         protected:
-          HighFive::File File_;
+          std::optional<HighFive::File> File_;
       };
   };
 }
