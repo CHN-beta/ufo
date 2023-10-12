@@ -60,7 +60,7 @@ namespace ufo
     {
       std::vector resolution{ Resolution.first, Resolution.second };
       std::vector range{ Range.first, Range.second };
-      Hdf5File(filename).write(Values, "Values")
+      Hdf5file{}.open_for_write(filename).write(Values, "Values")
         .write(XTicks, "XTicks")
         .write(YTicks, "YTicks")
         .write(resolution, "Resolution")

@@ -26,11 +26,7 @@ namespace ufo
         PrimativeCellBasisNumber(i) = node["PrimativeCellBasisNumber"][i].as<int>();
 
       if (auto value = node["SelectedAtoms"])
-      {
-        SelectedAtoms.emplace();
-        for (unsigned i = 0; i < value.size(); i++)
-          (*SelectedAtoms)[i] = value[i].as<unsigned>();
-      }
+        SelectedAtoms.emplace(value.as<std::vector<unsigned>>());
 
       auto read_file_config = [filename](YAML::Node source, InputOutputFile& config)
       {
@@ -142,7 +138,7 @@ namespace ufo
     {
       std::vector<std::vector<std::vector<double>>> frequency, path;
       std::vector<std::vector<std::vector<std::vector<PhonopyComplex>>>> eigenvector_vector;
-      Hdf5File(QpointDataInputFile.FileName).read(frequency, "/frequency")
+      Hdf5file{}.open_for_read(QpointDataInputFile.FileName).read(frequency, "/frequency")
         .read(eigenvector_vector, "/eigenvector")
         .read(path, "/path");
       std::vector size = { frequency.size(), frequency[0].size(), frequency[0][0].size() };
@@ -262,7 +258,7 @@ namespace ufo
           Weight.back().push_back(mode.Weight);
         }
       }
-      Hdf5File(filename).write(Qpoint, "/Qpoint")
+      Hdf5file{}.open_for_write(filename).write(Qpoint, "/Qpoint")
         .write(Source, "/Source")
         .write(Frequency, "/Frequency")
         .write(Weight, "/Weight");
