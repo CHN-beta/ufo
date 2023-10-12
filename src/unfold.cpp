@@ -410,7 +410,7 @@ namespace ufo
         // 如果有 PDOS 因子, 则将其乘到 projection_coefficient 上
         if (pdos_factor)
           for (auto& _ : projection_coefficient)
-            _ *= (*pdos_factor)[std::distance(&mode_data, &all_mode_data.front())];
+            _ *= (*pdos_factor)[std::distance(&all_mode_data.front(), &mode_data)];
         number_of_finished_modes++;
         return projection_coefficient;
       }
