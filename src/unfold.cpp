@@ -25,67 +25,31 @@ namespace ufo
       for (unsigned i = 0; i < 3; i++)
         PrimativeCellBasisNumber(i) = node["PrimativeCellBasisNumber"][i].as<int>();
 
-      auto read_file_config = [filename](YAML::Node source, InputOutputFile& config)
-      {
-        if (auto _ = source["SameAsConfigFile"])
-        {
-          auto __ = _.as<bool>();
-          config.ExtraParameters["SameAsConfigFile"] = __;
-          if (__)
-          {
-            config.FileName = filename;
-            config.Format = "yaml";
-            return;
-          }
-        }
-        config.FileName = source["FileName"].as<std::string>();
-        config.Format = source["Format"].as<std::string>();
-        if (auto _ = source["RelativeToConfigFile"])
-        {
-          auto __ = _.as<bool>();
-          config.ExtraParameters["RelativeToConfigFile"] = __;
-          if (__)
-            config.FileName = std::filesystem::path(filename).parent_path() / config.FileName;
-        }
-      };
-      read_file_config(node["AtomPositionInputFile"], AtomPositionInputFile);
-      if (!std::set<std::string>{"yaml"}.contains(AtomPositionInputFile.Format))
-        throw std::runtime_error(fmt::format
-          ("Unknown AtomPositionInputFile.Format: {}, should be \"yaml\".", AtomPositionInputFile.Format));
-      read_file_config(node["QpointDataInputFile"], QpointDataInputFile);
-      if (!std::set<std::string>{"yaml", "hdf5"}.contains(QpointDataInputFile.Format))
-        throw std::runtime_error(fmt::format
-          ("Unknown QpointDataInputFile.Format: {}, should be \"yaml\" or \"hdf5\".", QpointDataInputFile.Format));
+      AtomPositionInputFile = DataFile
+      (
+        node["AtomPositionInputFile"], {"yaml"},
+        filename, true
+      );
+      QpointDataInputFile = DataFile
+      (
+        node["QpointDataInputFile"], {"yaml", "hdf5"},
+        filename, true
+      );
       if (auto value = node["QpointDataOutputFile"])
       {
         QpointDataOutputFile.resize(value.size());
         for (unsigned i = 0; i < value.size(); i++)
-        {
-          read_file_config(value[i], QpointDataOutputFile[i]);
-          if
+          QpointDataOutputFile[i] = DataFile
           (
-            QpointDataOutputFile[i].ExtraParameters.contains("SameAsConfigFile")
-            && std::any_cast<bool>(QpointDataOutputFile[i].ExtraParameters["SameAsConfigFile"])
-          )
-            throw std::runtime_error("QpointDataOutputFile.SameAsConfigFile should not be set.");
-          if
-          (
-            !std::set<std::string>{"yaml", "yaml-human-readable", "zpp", "hdf5"}
-              .contains(QpointDataOutputFile[i].Format)
-          )
-            throw std::runtime_error(fmt::format
-            (
-              "Unknown QpointDataOutputFile[{}].Format: {}, should be "
-                "\"yaml\", \"yaml-human-readable\", \"zpp\" or \"hdf5\".",
-              i, QpointDataOutputFile[i].Format
-            ));
-        }
+            value[i], {"yaml", "yaml-human-readable", "zpp", "hdf5"},
+            filename, false
+          );
       }
     }
 
     if (AtomPositionInputFile.Format == "yaml")
     {
-      auto node = YAML::LoadFile(AtomPositionInputFile.FileName);
+      auto node = YAML::LoadFile(AtomPositionInputFile.Filename);
       std::vector<YAML::Node> points;
       if (auto _ = node["points"])
         points = _.as<std::vector<YAML::Node>>();
@@ -101,7 +65,7 @@ namespace ufo
     }
     if (QpointDataInputFile.Format == "yaml")
     {
-      auto node = YAML::LoadFile(QpointDataInputFile.FileName);
+      auto node = YAML::LoadFile(QpointDataInputFile.Filename);
       auto phonon = node["phonon"].as<std::vector<YAML::Node>>();
       QpointData.resize(phonon.size());
       for (unsigned i = 0; i < phonon.size(); i++)
@@ -135,7 +99,7 @@ namespace ufo
     {
       std::vector<std::vector<std::vector<double>>> frequency, path;
       std::vector<std::vector<std::vector<std::vector<PhonopyComplex>>>> eigenvector_vector;
-      Hdf5file{}.open_for_read(QpointDataInputFile.FileName).read(frequency, "/frequency")
+      Hdf5file{}.open_for_read(QpointDataInputFile.Filename).read(frequency, "/frequency")
         .read(eigenvector_vector, "/eigenvector")
         .read(path, "/path");
       std::vector size = { frequency.size(), frequency[0].size(), frequency[0][0].size() };
@@ -163,7 +127,7 @@ namespace ufo
     (decltype(InputType::QpointDataOutputFile) output_files) const
   {
     for (auto& output_file : output_files)
-      write(output_file.FileName, output_file.Format);
+      write(output_file.Filename, output_file.Format);
   }
   void UnfoldSolver::OutputType::write(std::string filename, std::string format, unsigned percision) const
   {

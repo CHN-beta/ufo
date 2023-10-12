@@ -11,7 +11,7 @@ namespace ufo
         Eigen::Vector<unsigned, 3> SuperCellMultiplier;
         std::optional<Eigen::Matrix<double, 3, 3>> SuperCellDeformation;
         std::vector<Eigen::Vector3d> Qpoints;
-        std::string OutputFilename;
+        DataFile OutputFile;
 
         InputType(std::string config_file);
       };

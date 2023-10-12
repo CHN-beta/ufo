@@ -32,17 +32,10 @@ namespace ufo
         // 在单胞内取几个平面波的基矢
         Eigen::Vector<unsigned, 3> PrimativeCellBasisNumber;
 
-        struct InputOutputFile
-        {
-          std::string FileName;
-          std::string Format;
-          std::map<std::string, std::any> ExtraParameters;
-        };
-
         // 从哪个文件读入 AtomPosition, 以及这个文件的格式, 格式可选值包括 "yaml"
-        InputOutputFile AtomPositionInputFile;
+        DataFile AtomPositionInputFile;
         // 从哪个文件读入 QpointData, 以及这个文件的格式, 格式可选值包括 "yaml" 和 "hdf5"
-        InputOutputFile QpointDataInputFile;
+        DataFile QpointDataInputFile;
 
         // 超胞中原子的坐标，每行表示一个原子的坐标，单位为埃
         Eigen::MatrixX3d AtomPosition;
@@ -72,7 +65,7 @@ namespace ufo
         // yaml-human-readable: 使用 yaml 格式输出, 但是输出的结果更适合人类阅读,
         //  包括合并相近的模式, 去除权重过小的模式, 限制输出的小数位数.
         // zpp: 使用 zpp-bits 序列化, 可以直接被 plot.cpp 读取
-        std::vector<InputOutputFile> QpointDataOutputFile;
+        std::vector<DataFile> QpointDataOutputFile;
 
         // 从文件中读取输入 (包括一个较小的配置文件, 和一个 hdf5 或者一个 yaml 文件), 文件中应当包含:
         // 单胞的格矢: PrimativeCell 单位为埃 直接从 phonopy 的输出中复制

@@ -16,10 +16,8 @@ namespace ufo
           std::pair<unsigned, unsigned> Resolution;
           std::pair<double, double> Range;
           std::optional<std::vector<double>> YTicks;
-          std::string PictureFilename;
-          
-          struct DataFileType { std::string Filename, Format; };
-          std::optional<std::vector<DataFileType>> DataFiles;
+          DataFile PictureFile;
+          std::optional<std::vector<DataFile>> DataFiles;
         };
         std::vector<FigureConfigType> Figures;
 
@@ -28,7 +26,7 @@ namespace ufo
           UnfoldedDataType(std::string filename);
           UnfoldedDataType() = default;
         };
-        std::string UnfoldedDataFilename;
+        DataFile UnfoldedDataFile;
         UnfoldedDataType UnfoldedData;
 
         InputType(std::string config_file);

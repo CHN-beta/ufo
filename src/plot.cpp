@@ -30,27 +30,20 @@ namespace ufo
         throw std::runtime_error("Not enough lines in a figure");
       Figures.back().Resolution = figure["Resolution"].as<std::pair<unsigned, unsigned>>();
       Figures.back().Range = figure["Range"].as<std::pair<double, double>>();
-      Figures.back().PictureFilename = figure["PictureFilename"].as<std::string>();
+      Figures.back().PictureFile
+        = DataFile(figure["PictureFile"], {"png"}, config_file);
       if (figure["YTicks"])
         Figures.back().YTicks = figure["YTicks"].as<std::vector<double>>();
       if (figure["DataFiles"])
       {
         Figures.back().DataFiles.emplace();
         for (auto& data_file : figure["DataFiles"].as<std::vector<YAML::Node>>())
-        {
-          Figures.back().DataFiles->emplace_back
-          (
-            data_file["Filename"].as<std::string>(),
-            data_file["Format"].as<std::string>()
-          );
-          if (!std::set{ "hdf5"s, "zpp"s }.contains(Figures.back().DataFiles->back().Format))
-            throw std::runtime_error(fmt::format("Unknown data file format: {}",
-              Figures.back().DataFiles->back().Format));
-        }
+          Figures.back().DataFiles->emplace_back()
+            = DataFile(data_file, {"hdf5", "zpp"}, config_file);
       }
     }
-    UnfoldedDataFilename = input["UnfoldedDataFilename"].as<std::string>();
-    UnfoldedData = UnfoldedDataType(UnfoldedDataFilename);
+    UnfoldedDataFile = DataFile(input["UnfoldedDataFile"], {"zpp"}, config_file);
+    UnfoldedData = UnfoldedDataType(UnfoldedDataFile.Filename);
   }
   const PlotSolver::OutputType& PlotSolver::OutputType::write(std::string filename, std::string format) const
   {
@@ -96,7 +89,7 @@ namespace ufo
       auto y_ticks = figure.YTicks.value_or(std::vector<double>{});
       for (auto& _ : y_ticks)
         _ = (_ - figure.Range.first) / (figure.Range.second - figure.Range.first) * figure.Resolution.second;
-      plot(values, figure.PictureFilename, x_ticks, y_ticks);
+      plot(values, figure.PictureFile.Filename, x_ticks, y_ticks);
       Output_->emplace_back();
       Output_->back().Values = std::move(values);
       Output_->back().XTicks = std::move(x_ticks);
