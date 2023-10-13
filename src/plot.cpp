@@ -245,7 +245,7 @@ namespace ufo
     for (unsigned i = 0; i < values[0].size(); i++)
       for (unsigned j = 0; j < values.size(); j++)
       {
-        auto v = values[j][i];
+        auto v = values[j][i] / 184 * 256;
         if (v < 0.05)
           v = 0;
         a[i][j] = v * 100 * 255;
