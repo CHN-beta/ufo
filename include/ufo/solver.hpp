@@ -13,6 +13,7 @@
 # include <map>
 # include <vector>
 # include <span>
+# include <ranges>
 # include <yaml-cpp/yaml.h>
 # include <Eigen/Dense>
 # include <concurrencpp/concurrencpp.h>
@@ -23,6 +24,7 @@
 # include <zpp_bits.h>
 # include <matplot/matplot.h>
 # include <matplot/backend/opengl.h>
+# include <range/v3/all.hpp>
 
 // 在相位中, 约定为使用 $\exp (2 \pi i \vec{q} \cdot \vec{r})$ 来表示原子的运动状态
 //  (而不是 $\exp (-2 \pi i \vec{q} \cdot \vec{r})$)
@@ -31,22 +33,17 @@
 
 namespace Eigen
 {
-  constexpr inline auto serialize(auto & archive, Eigen::Matrix3d& matrix)
-    { return archive(std::span(matrix.data(), matrix.size())); }
-  constexpr inline auto serialize(auto & archive, const Eigen::Matrix3d& matrix)
-    { return archive(std::span(matrix.data(), matrix.size())); }
-  constexpr inline auto serialize(auto & archive, Eigen::Vector3d& vector)
-    { return archive(std::span(vector.data(), vector.size())); }
-  constexpr inline auto serialize(auto & archive, const Eigen::Vector3d& vector)
-    { return archive(std::span(vector.data(), vector.size())); }
+  constexpr auto serialize(auto & archive, Eigen::Matrix3d& matrix);
+  constexpr auto serialize(auto & archive, const Eigen::Matrix3d& matrix);
+  constexpr auto serialize(auto & archive, Eigen::Vector3d& vector);
+  constexpr auto serialize(auto & archive, const Eigen::Vector3d& vector);
 }
 
 namespace ufo
 {
   using namespace std::literals;
   struct PhonopyComplex { double r, i; };
-  inline HighFive::CompoundType create_compound_complex()
-    { return {{ "r", HighFive::AtomicType<double>{}}, {"i", HighFive::AtomicType<double>{}}}; }
+  HighFive::CompoundType create_compound_complex();
 
 	namespace detail_
 	{
@@ -56,86 +53,59 @@ namespace ufo
 	template <typename T> concept ZppSerializable
     = requires() { detail_::SpecializationOfBitsMembersHelper<T>::value == true; };
 
-  class Solver
+  struct Solver
   {
-    public:
-      virtual Solver& operator()() = 0;
-      virtual ~Solver() = default;
+    Solver() = delete;
 
-      static concurrencpp::generator<std::pair<Eigen::Vector<unsigned, 3>, unsigned>>
-        triplet_sequence(Eigen::Vector<unsigned, 3> range);
+    static concurrencpp::generator<std::pair<Eigen::Vector<unsigned, 3>, unsigned>>
+      triplet_sequence(Eigen::Vector<unsigned, 3> range);
 
-      template <ZppSerializable T> inline static void zpp_write(const T& object, std::string filename)
-      {
-        auto [data, out] = zpp::bits::data_out();
-        out(object).or_throw();
-        static_assert(sizeof(char) == sizeof(std::byte));
-        std::ofstream file(filename, std::ios::binary | std::ios::out);
-        file.exceptions(std::ios::badbit | std::ios::failbit);
-        file.write(reinterpret_cast<const char*>(data.data()), data.size());
-      }
-      template <ZppSerializable T> inline static T zpp_read(std::string filename)
-      {
-        auto input = std::ifstream(filename, std::ios::binary | std::ios::in);
-        input.exceptions(std::ios::badbit | std::ios::failbit);
-        static_assert(sizeof(std::byte) == sizeof(char));
-        std::vector<std::byte> data;
-        {
-          std::vector<char> string(std::istreambuf_iterator<char>(input), {});
-          data.assign
-          (
-            reinterpret_cast<std::byte*>(string.data()),
-            reinterpret_cast<std::byte*>(string.data() + string.size())
-          );
-        }
-        auto in = zpp::bits::in(data);
-        T output;
-        in(output).or_throw();
-        return output;
-      }
+    template <ZppSerializable T> static void zpp_write(const T& object, std::string filename);
+    template <ZppSerializable T> static T zpp_read(std::string filename);
 
-      class Hdf5file
-      {
-        public:
-          inline Hdf5file& open_for_read(std::string filename)
-          {
-            File_ = HighFive::File(filename, HighFive::File::ReadOnly);
-            return *this;
-          }
-          inline Hdf5file& open_for_write(std::string filename)
-          {
-            File_ = HighFive::File(filename, HighFive::File::ReadWrite | HighFive::File::Create
-              | HighFive::File::Truncate);
-            return *this;
-          }
-          template <typename T> inline Hdf5file& read(T& object, std::string name)
-          {
-            object = File_->getDataSet(name).read<std::remove_cvref_t<decltype(object)>>();
-            return *this;
-          }
-          template <typename T> inline Hdf5file& write(const T& object, std::string name)
-          {
-            File_->createDataSet(name, object);
-            return *this;
-          }
-        protected:
-          std::optional<HighFive::File> File_;
-      };
+    class Hdf5file
+    {
+      public:
+        Hdf5file& open_for_read(std::string filename);
+        Hdf5file& open_for_write(std::string filename);
+        template <typename T> Hdf5file& read(T& object, std::string name);
+        template <typename T> Hdf5file& write(const T& object, std::string name);
+      protected:
+        std::optional<HighFive::File> File_;
+    };
 
-      struct DataFile
-      {
-        std::string Filename;
-        std::string Format;
-        std::map<std::string, std::any> ExtraParameters;
-        inline DataFile() = default;
-        DataFile
-        (
-          YAML::Node node, std::set<std::string> supported_format,
-          std::string config_file, bool allow_same_as_config_file = false
-        );
-      };
+    struct DataFile
+    {
+      std::string Filename;
+      std::string Format;
+      std::map<std::string, std::any> ExtraParameters;
+      inline DataFile() = default;
+      DataFile
+      (
+        YAML::Node node, std::set<std::string> supported_format,
+        std::string config_file, bool allow_same_as_config_file = false
+      );
+    };
 
+    template <typename T> struct PipizedFunction
+    {
+      T Function;
+      PipizedFunction(T&& function);
+    };
+    template <typename T> static PipizedFunction<T> pipize(T&& function);
   };
+  template <typename T> static decltype(auto) operator|(auto&& input, Solver::PipizedFunction<T>&& function);
+
+  struct UnmoveHealerType {};
+  template <typename T> decltype(auto) operator|(T&& input, const UnmoveHealerType&);
+
+  template <std::size_t N> struct ToSpanHelperType {};
+  template <std::size_t N> decltype(auto) operator|(auto&& input, const ToSpanHelperType<N>&);
+
+  struct ToEigenHelper {};
+  template <typename T, std::size_t N> decltype(auto) operator|(const std::span<T, N>& input, const ToEigenHelper&);
+  template <typename T, std::size_t M, std::size_t N> decltype(auto) operator|
+    (const std::span<std::span<T, N>, M>& input, const ToEigenHelper&);
 }
 
 HIGHFIVE_REGISTER_TYPE(ufo::PhonopyComplex, ufo::create_compound_complex)

@@ -112,53 +112,39 @@ namespace ufo
         virtual ~OutputType() = default;
       };
 
-      // 第一层是不同的 sub qpoint, 第二层是单胞内不同的平面波
-      using BasisType = std::vector<std::vector<Eigen::VectorXcd>>;
-    protected:
-      InputType Input_;
-      std::optional<OutputType> Output_;
-      std::optional<BasisType> Basis_;
-
-      // 第一层是不同的模式, 第二层是不同的 sub qpoint
-      using ProjectionCoefficientType_ = std::vector<std::vector<double>>;
-
-    public:
-      UnfoldSolver(std::string config_file);
-      UnfoldSolver& operator()() override;
-
       // 构建基
       // 每个 q 点对应的一组 sub qpoint。不同的 q 点所对应的 sub qpoint 是不一样的，但 sub qpoint 与 q 点的相对位置一致。
       // 这里 xyz_of_diff_of_sub_qpoint 即表示这个相对位置。
       // 由于基只与这个相对位置有关（也就是说，不同 q 点的基是一样的），因此可以先计算出所有的基，这样降低计算量。
       // 外层下标对应超胞倒格子的整数倍那部分(第二部分), 也就是不同的 sub qpoint
       // 内层下标对应单胞倒格子的整数倍那部分(第一部分), 也就是 sub qpoint 上的不同平面波（取的数量越多，结果越精确）
-      static BasisType construct_basis
-      (
-        const decltype(InputType::PrimativeCell)& primative_cell,
-        const decltype(InputType::SuperCellMultiplier)& super_cell_multiplier,
-        const decltype(InputType::PrimativeCellBasisNumber)&
-          primative_cell_basis_number,
-        const decltype(InputType::AtomPosition)& atom_position
-      );
+      struct ConstructBasisInputType
+      {
+        Eigen::Matrix3d& PrimativeCell;
+        Eigen::Vector<unsigned, 3>& SuperCellMultiplier;
+        Eigen::Vector<unsigned, 3>& PrimativeCellBasisNumber;
+        Eigen::MatrixX3d& AtomPosition;
+      };
+      static std::vector<std::vector<Eigen::VectorXcd>> construct_basis(const ConstructBasisInputType& input);
 
-      // 计算投影系数, 是反折叠的核心步骤
-      ProjectionCoefficientType_ construct_projection_coefficient
-      (
-        const BasisType& basis,
-        const std::vector<std::reference_wrapper<const decltype
-          (InputType::QpointDataType::ModeDataType::AtomMovement)>>& mode_data,
-        std::atomic<unsigned>& number_of_finished_modes
-      );
+      // 计算某一个模式对应的投影系数, 是反折叠的核心步骤
+      struct ConstructProjectionCoefficientInputType
+      {
+        std::vector<std::vector<Eigen::VectorXcd>>& Basis;
+        Eigen::MatrixX3cd& AtomMovement;
+      };
+      static std::vector<double> construct_projection_coefficient(const ConstructProjectionCoefficientInputType& input);
 
-      OutputType construct_output
-      (
-        const decltype(InputType::SuperCellMultiplier)& super_cell_multiplier,
-        const decltype(InputType::SuperCellDeformation)& super_cell_deformation,
-        const std::vector<std::reference_wrapper<const decltype
-          (InputType::QpointDataType::Qpoint)>>& meta_qpoint_by_reciprocal_super_cell,
-        const std::vector<std::vector<std::reference_wrapper<const decltype
-          (InputType::QpointDataType::ModeDataType::Frequency)>>>& frequency,
-        const ProjectionCoefficientType_& projection_coefficient
-      );
+      // 计算某个 meta qpoint 对应的所有 sub qpoint 的坐标
+      // 返回值中，单位为单胞的倒格矢
+      struct ConstructSubQpointInputType
+      {
+        Eigen::Vector3d& MetaQpoint; // 单位为超胞的倒格矢
+        Eigen::Vector<unsigned, 3>& SuperCellMultiplier;
+        Eigen::Matrix<double, 3, 3>& SuperCellDeformation;
+      };
+      static std::vector<Eigen::Vector3d> construct_sub_qpoint(const ConstructSubQpointInputType& input);
+
+      void unfold(std::string config_file);
   };
 }

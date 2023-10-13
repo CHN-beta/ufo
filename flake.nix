@@ -16,7 +16,7 @@
       devShell.x86_64-linux = pkgs.mkShell.override { stdenv = pkgs.gcc13Stdenv; }
       {
         packages = with pkgs; [ pkg-config cmake ninja ];
-        buildInputs = (with pkgs; [ eigen yaml-cpp fmt highfive tbb_2021_8.dev glfw libGL ])
+        buildInputs = (with pkgs; [ eigen yaml-cpp fmt highfive tbb_2021_8.dev glfw libGL range-v3 ])
           ++ (with localPackages; [ concurrencpp matplotplusplus zpp-bits glad ]);
         hardeningDisable = [ "all" ];
         # NIX_DEBUG = "1";
