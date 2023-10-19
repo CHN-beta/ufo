@@ -130,26 +130,4 @@ namespace ufo
     else
       return std::span(input.data(), N);
   }
-
-  inline constexpr ToEigenHelper to_eigen;
-  template <typename T, std::size_t N> inline decltype(auto) operator|
-    (const std::span<T, N>& input, const ToEigenHelper&)
-  {
-    if constexpr (N == std::dynamic_extent)
-      return Eigen::VectorX<T>(input.data(), input.size());
-    else
-      return Eigen::Vector<T, N>(input.data());
-  }
-  template <typename T, std::size_t M, std::size_t N> inline decltype(auto) operator|
-    (const std::span<std::span<T, N>, M>& input, const ToEigenHelper&)
-  {
-    if constexpr (M == std::dynamic_extent)
-      if constexpr (N == std::dynamic_extent)
-      {
-        Eigen::Matrix
-        return Eigen::MatrixX<T>(input.data()->data(), input.size(), input.data()->size());
-      }
-      else
-        return Eigen::Matrix<T, Eigen::Dynamic, N>(input.data()->data(), input.size());
-  }
 }

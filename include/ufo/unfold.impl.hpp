@@ -9,29 +9,12 @@ namespace ufo
     // read main input file
     {
       auto node = YAML::LoadFile(filename);
-      PrimativeCell = [](YAML::Node node)
-      {
-        Eigen::Matrix3d matrix;
-        for (unsigned i = 0; i < 3; i++)
-          for (unsigned j = 0; j < 3; j++)
-            matrix(i, j) = node[i][j].as<double>();
-        return matrix;
-      }(node["PrimativeCell"]);
-
-      for (unsigned i = 0; i < 3; i++)
-        SuperCellMultiplier(i) = node["SuperCellMultiplier"][i].as<int>();
-
+      PrimativeCell = node["PrimativeCell"].as<std::vector<std::vector<double>>>() | biu::toEigen<3, 3>;
+      SuperCellMultiplier = node["SuperCellMultiplier"].as<std::vector<unsigned>>() | toEigenVector<3>;
       if (auto value = node["SuperCellDeformation"])
-      {
-        SuperCellDeformation.emplace();
-        for (unsigned i = 0; i < 3; i++)
-          for (unsigned j = 0; j < 3; j++)
-            (*SuperCellDeformation)(i, j) = value[i][j].as<double>();
-      }
-
-      for (unsigned i = 0; i < 3; i++)
-        PrimativeCellBasisNumber(i) = node["PrimativeCellBasisNumber"][i].as<int>();
-
+        SuperCellDeformation = value.as<std::vector<std::vector<double>>>() | toEigenMatrix<3, 3>;
+      PrimativeCellBasisNumber = node["PrimativeCellBasisNumber"].as<std::vector<unsigned>>()
+        | toEigenVector<3>;
       AtomPositionInputFile = DataFile
       (
         node["AtomPositionInputFile"], {"yaml"},
@@ -43,29 +26,30 @@ namespace ufo
         filename, true
       );
       if (auto value = node["QpointDataOutputFile"])
-      {
-        QpointDataOutputFile.resize(value.size());
-        for (unsigned i = 0; i < value.size(); i++)
-          QpointDataOutputFile[i] = DataFile
+        for (auto&& v : value)
+          QpointDataOutputFile.push_back(DataFile
           (
-            value[i], {"yaml", "yaml-human-readable", "zpp", "hdf5"},
+            v, {"yaml", "yaml-human-readable", "zpp", "hdf5"},
             filename, false
-          );
-      }
+          ));
     }
 
     if (AtomPositionInputFile.Format == "yaml")
     {
       auto node = YAML::LoadFile(AtomPositionInputFile.Filename);
-      std::vector<YAML::Node> points;
-      if (auto _ = node["points"])
-        points = _.as<std::vector<YAML::Node>>();
-      else
-        points = node["unit_cell"]["points"].as<std::vector<YAML::Node>>();
-      auto atom_position_to_super_cell = Eigen::MatrixX3d(points.size(), 3);
-      for (unsigned i = 0; i < points.size(); i++)
-        for (unsigned j = 0; j < 3; j++)
-          atom_position_to_super_cell(i, j) = points[i]["coordinates"][j].as<double>();
+      YAML::Node source = node["points"];
+      if (!source)
+        source = node["unit_cell"]["points"];
+      auto atom_position_to_super_cell = source
+        | std::views::transform([](YAML::Node&& v)
+          { return v["coordinates"].as<std::vector<double>>(); })
+        | std::
+        | toEigenMatrix<std::dynamic_extent, 3>
+
+      auto atom_position_to_super_cell = Eigen::MatrixX3d(source, 3);
+      for (unsigned i = 0; i < source.size(); i++)
+        atom_position_to_super_cell.row(i) = source[i]["coordinates"].as<std::vector<double>>()
+          | toEigenVector<3>;
       auto super_cell = (SuperCellDeformation.value_or(Eigen::Matrix3d::Identity())
         * SuperCellMultiplier.cast<double>().asDiagonal() * PrimativeCell).eval();
       AtomPosition = atom_position_to_super_cell * super_cell;
@@ -73,7 +57,83 @@ namespace ufo
     if (QpointDataInputFile.Format == "yaml")
     {
       auto node = YAML::LoadFile(QpointDataInputFile.Filename);
+      QpointData = node["phonon"].as<std::vector<YAML::Node>>()
+        | std::views::transform([](YAML::Node&& v)
+          {
+            return QpointDataType
+            {
+              .Qpoint = v["q-position"].as<std::vector<double>>() | toEigenVector<3>,
+              .ModeData = std::vector(
+                v["band"].as<std::vector<YAML::Node>>()
+                | std::views::transform([](YAML::Node&& v)
+                  {
+                    return QpointDataType::ModeDataType
+                    {
+                      .Frequency = v["frequency"].as<double>(),
+                      .EigenVector = 
+                      v["frequency"].as<double>(),
+                      Eigen::MatrixX3cd(v["eigenvector"]
+                        .as<std::vector<std::vector<std::vector<double>>>>()
+                        | std::views::transform([](auto&& v)
+                          {
+                            return Eigen::Vector3cd(v | toEigenVector<2>);
+                          })
+                        | toEigenMatrix)
+                    };
+                  })
+                | toStdVector
+              )
+
+              )
+
+              v["q-position"].as<std::vector<double>>() | toEigenVector<3>,
+              v["band"].as<std::vector<YAML::Node>>()
+              | std::views::transform([](auto&& v)
+                {
+                  return ModeDataType
+                  {
+                    v["frequency"].as<double>(),
+                    Eigen::MatrixX3cd(v["eigenvector"]
+                      .as<std::vector<std::vector<std::vector<double>>>>()
+                      | std::views::transform([](auto&& v)
+                        {
+                          return Eigen::Vector3cd(v | toEigenVector<2>);
+                        })
+                      | toEigenMatrix)
+                  };
+                })
+              | toStdVector
+            };
+
+            QpointDataType output;
+            for (unsigned i = 0; i < 3; i++)
+              output.Qpoint(i) = v["q-position"][i].as<double>();
+            output.ModeData = v["band"].as<std::vector<YAML::Node>>()
+              | std::views::transform([](auto&& v)
+                {
+                  ModeDataType output;
+                  output.Frequency = v["frequency"].as<double>();
+                  auto eigenvector_vectors = v["eigenvector"]
+                    .as<std::vector<std::vector<std::vector<double>>>>();
+                  Eigen::MatrixX3cd eigenvectors(AtomPosition.rows(), 3);
+                  for (unsigned i = 0; i < AtomPosition.rows(); i++)
+                    for (unsigned j = 0; j < 3; j++)
+                      eigenvectors(i, j)
+                        = eigenvector_vectors[i][j][0] + 1i * eigenvector_vectors[i][j][1];
+                  output.EigenVector = eigenvectors / eigenvectors.norm();
+                  return output;
+                })
+              | toStdVector;
+            return output;
+          })
+
+
       auto phonon = node["phonon"].as<std::vector<YAML::Node>>();
+
+
+
+
+      QpointData = std::vector<QpointDataType>(phonon.size());
       QpointData.resize(phonon.size());
       for (unsigned i = 0; i < phonon.size(); i++)
       {

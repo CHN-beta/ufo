@@ -17,7 +17,7 @@
       {
         packages = with pkgs; [ pkg-config cmake ninja ];
         buildInputs = (with pkgs; [ eigen yaml-cpp fmt highfive tbb_2021_8.dev glfw libGL range-v3 ])
-          ++ (with localPackages; [ concurrencpp matplotplusplus zpp-bits glad ]);
+          ++ (with localPackages; [ concurrencpp matplotplusplus zpp-bits glad biu ]);
         hardeningDisable = [ "all" ];
         # NIX_DEBUG = "1";
       };

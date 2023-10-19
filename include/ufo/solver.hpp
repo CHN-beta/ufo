@@ -25,6 +25,7 @@
 # include <matplot/matplot.h>
 # include <matplot/backend/opengl.h>
 # include <range/v3/all.hpp>
+# include <biu.hpp>
 
 // 在相位中, 约定为使用 $\exp (2 \pi i \vec{q} \cdot \vec{r})$ 来表示原子的运动状态
 //  (而不是 $\exp (-2 \pi i \vec{q} \cdot \vec{r})$)
@@ -101,11 +102,6 @@ namespace ufo
 
   template <std::size_t N> struct ToSpanHelperType {};
   template <std::size_t N> decltype(auto) operator|(auto&& input, const ToSpanHelperType<N>&);
-
-  struct ToEigenHelper {};
-  template <typename T, std::size_t N> decltype(auto) operator|(const std::span<T, N>& input, const ToEigenHelper&);
-  template <typename T, std::size_t M, std::size_t N> decltype(auto) operator|
-    (const std::span<std::span<T, N>, M>& input, const ToEigenHelper&);
 }
 
 HIGHFIVE_REGISTER_TYPE(ufo::PhonopyComplex, ufo::create_compound_complex)

@@ -54,7 +54,7 @@ namespace ufo
             // 这个数据是这样得到的: phonopy 输出的动态矩阵的 eigenvector 乘以 $\exp(-2 \pi i \vec q \cdot \vec r)$
             // 这个数据可以认为是原子位移中, 关于超胞有周期性的那一部分, 再乘以原子质量的开方.
             // 这个数据在读入后会被立即归一化.
-            Eigen::MatrixX3cd AtomMovement;
+            Eigen::MatrixX3cd EigenVector;
           };
           std::vector<ModeDataType> ModeData;
         };
