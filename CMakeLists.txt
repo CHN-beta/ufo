@@ -1,11 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
-project(ufo VERSION 0.0.0 LANGUAGES CXX)
+project(ufo VERSION 0 LANGUAGES CXX)
 enable_testing()
 include(GNUInstallDirs)
-
-set_property(GLOBAL PROPERTY CXX_STANDARD 23)
-set_property(GLOBAL PROPERTY CXX_STANDARD_REQUIRED ON)
-set_property(GLOBAL PROPERTY CXX_EXTENSIONS OFF)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message("Setting build type to 'Release' as none was specified.")
@@ -13,24 +9,23 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
-find_package(yaml-cpp REQUIRED)
-find_package(Eigen3 REQUIRED)
-find_package(fmt REQUIRED)
-find_package(concurrencpp REQUIRED)
-find_package(HighFive REQUIRED)
 find_package(TBB REQUIRED)
-find_package(glad REQUIRED)
-# find_package(Matplot++ REQUIRED COMPONENTS matplot_opengl)
 find_package(Matplot++ REQUIRED)
-find_path(ZPP_BITS_INCLUDE_DIR zpp_bits.h REQUIRED)
+find_package(biu REQUIRED)
+find_package(Threads REQUIRED)
 
-add_executable(ufo src/solver.cpp src/fold.cpp src/unfold.cpp src/plot.cpp src/main.cpp)
-target_include_directories(ufo PRIVATE ${PROJECT_SOURCE_DIR}/include ${ZPP_BITS_INCLUDE_DIR})
-target_link_libraries(ufo PRIVATE
-  yaml-cpp Eigen3::Eigen fmt::fmt concurrencpp::concurrencpp HighFive_HighFive TBB::tbb Matplot++::matplot
-  Matplot++::matplot_opengl)
-# target_compile_definitions(ufo PRIVATE $<$<CONFIG:Debug>:_GLIBCXX_DEBUG>)
+add_executable(ufo src/fold.cpp src/unfold.cpp src/plot.cpp src/raman-create-displacement.cpp src/main.cpp)
+target_include_directories(ufo PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(ufo PRIVATE TBB::tbb Matplot++::matplot biu::biu)
+target_compile_features(ufo PRIVATE cxx_std_23)
+target_compile_options(ufo PRIVATE -fexperimental-library)
+
+install(TARGETS ufo RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 get_property(ImportedTargets DIRECTORY "${CMAKE_SOURCE_DIR}" PROPERTY IMPORTED_TARGETS)
 message("Imported targets: ${ImportedTargets}")
 message("List of compile features: ${CMAKE_CXX_COMPILE_FEATURES}")
+
+include(CTest)
+add_test(NAME fold COMMAND ufo fold ${PROJECT_SOURCE_DIR}/test/fold/config.yaml)
+
