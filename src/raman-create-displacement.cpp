@@ -24,18 +24,6 @@ void ufo::raman_create_displacement(std::string config_file)
     // 输出的数据文件名
     std::string OutputDataFile;
   };
-  struct Output
-  {
-    struct ModeData_t
-    {
-      std::size_t MetaQpointIndex;
-      std::size_t ModeIndex;
-      // 每个原子的位移，单位为埃
-      Eigen::MatrixX3d AtomMovement;
-    };
-    std::vector<ModeData_t> ModeData;
-    using serialize = zpp::bits::members<1>;
-  };
 
   // 假定同类型的原子一定写在一起
   auto generate_poscar = []
@@ -70,10 +58,11 @@ void ufo::raman_create_displacement(std::string config_file)
     return ss.str();
   };
 
+  biu::Logger::Guard log(config_file);
   auto input = YAML::LoadFile(config_file).as<Input>();
   auto unfolded_data = biu::deserialize<UnfoldOutput>
     (biu::read<std::byte>(input.UnfoldedDataFile));
-  Output output;
+  DisplacementOutput output;
 
   // 搜索满足条件的模式，找到满足条件的模式后，就将 MetaQpoint 的索引加入到 output 中
   // 之所以使用 MetaQpoint 的索引而不是 Qpoint 的索引，是因为 Qpoint 中可能有指向同一个 MetaQpoint 中模式的不同模式都满足要求
@@ -90,11 +79,18 @@ void ufo::raman_create_displacement(std::string config_file)
     for (std::size_t i = 0; i < qpoint.ModeData.size(); i++)
     {
       if (qpoint.ModeData[i].Weight < input.ThresholdWhenSearchingModes.value_or(0.01)) continue;
+      log.debug("Found mode {} {} frequency {}"_f(qpoint.Qpoint, i, qpoint.ModeData[i].Frequency));
       selected_modes.insert({qpoint.SourceIndex, i});
     }
   }
 
   // 构造输出数据
+  output.AtomMasses = input.AtomSymbols
+    | ranges::views::transform([&](const auto& symbol)
+      { return input.AtomMasses.at(symbol); })
+    | ranges::to_vector
+    | biu::toEigen<>;
+  output.MaxDisplacement = input.MaxDisplacement;
   for (auto [i, j] : selected_modes)
   {
     auto& mode_data = output.ModeData.emplace_back();
@@ -102,18 +98,12 @@ void ufo::raman_create_displacement(std::string config_file)
     mode_data.ModeIndex = j;
     // 未归一化的位移, 假定虚部总是为零
     auto atom_movement =
-      unfolded_data.MetaQpointData[i].ModeData[j].AtomMovement.real().cwiseProduct
-      (
-        (
-          input.AtomSymbols
-            | ranges::views::transform([&](const auto& symbol)
-              { return input.AtomMasses.at(symbol); })
-            | ranges::to_vector
-            | biu::toEigen<>
-        ).cwiseSqrt().cwiseInverse().rowwise().replicate(3)
-      ).eval();
+      unfolded_data.MetaQpointData[i].ModeData[j].AtomMovement.real()
+        .cwiseProduct(output.AtomMasses.cwiseSqrt().cwiseInverse().rowwise().replicate(3)).eval();
     // 归一化
-    mode_data.AtomMovement = atom_movement / atom_movement.rowwise().norm().maxCoeff() * input.MaxDisplacement;
+    mode_data.Ratio = input.MaxDisplacement / atom_movement.rowwise().norm().maxCoeff();
+    mode_data.AtomMovement = atom_movement * mode_data.Ratio;
+    log.debug("Write mode {} {} {}"_f(i, j, mode_data.AtomMovement.rowwise().norm().transpose()));
   }
 
   // 输出

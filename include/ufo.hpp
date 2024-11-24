@@ -16,6 +16,7 @@ namespace ufo
   void plot_band(std::string config_file);
   void plot_point(std::string config_file);
   void raman_create_displacement(std::string config_file);
+  void raman_extract(std::vector<std::string> files);
   void raman_apply_contribution(std::string config_file);
 
   // 许多函数都需要用到这个，所以写到头文件中
@@ -70,5 +71,22 @@ namespace ufo
     std::vector<MetaQpointDataType> MetaQpointData;
 
     using serialize = zpp::bits::members<7>;
+  };
+  struct DisplacementOutput
+  {
+    struct ModeData_t
+    {
+      std::size_t MetaQpointIndex;
+      std::size_t ModeIndex;
+      // 每个原子的位移，单位为埃
+      Eigen::MatrixX3d AtomMovement;
+      // 为了使得位移最大的原子的位移恰好是 input.MaxDisplacement, 在位移上乘以了多大的系数
+      double Ratio;
+    };
+    std::vector<ModeData_t> ModeData;
+    Eigen::Vector3d AtomMasses;
+    double MaxDisplacement;
+    std::vector<std::size_t> QpointIndices;
+    using serialize = zpp::bits::members<4>;
   };
 }
