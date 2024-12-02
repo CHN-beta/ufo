@@ -32,5 +32,5 @@ message("List of compile features: ${CMAKE_CXX_COMPILE_FEATURES}")
 message("CMake build type: ${CMAKE_BUILD_TYPE}")
 
 include(CTest)
-add_test(NAME fold COMMAND ufo fold ${PROJECT_SOURCE_DIR}/test/fold/config.yaml)
-
+add_test(NAME fold WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/fold COMMAND ufo fold config.yaml)
+add_test(NAME unfold WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/unfold COMMAND ufo unfold config.yaml)

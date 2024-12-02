@@ -1,0 +1,12 @@
+SuperCellMultiplier: [4, 4, 1]
+SuperCellDeformation:
+  - [ 1, 0, 0 ]
+  - [ 0.5, 1, 0 ]
+  - [ 0, 0, 1 ]
+PrimativeCellBasisNumber: [ 8, 8, 8 ]
+PrimativePhonopy: primitive-phonopy.yaml
+PrimativeQpoint: primitive-band.hdf5
+SuperPhonopy: super-phonopy.yaml
+SuperQpoint: super-qpoints.hdf5
+OutputFile: unfold-output.zpp
+

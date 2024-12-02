@@ -27,8 +27,8 @@ void ufo::unfold(std::string config_file)
     // PositionToSuperCell(line vector) * SuperCell = PositionToPrimativeCell(line vector) * PrimativeCell
     // ReciprocalPositionToSuperCell(line vector) * ReciprocalSuperCell
     //  = ReciprocalPositionToPrimativeCell(line vector) * ReciprocalPrimativeCell
-    Eigen::Matrix3d SuperCellDeformation;
     Eigen::Vector3i SuperCellMultiplier;
+    Eigen::Matrix3d SuperCellDeformation;
 
     // 在单胞内取几个平面波的基矢
     Eigen::Vector<std::size_t, 3> PrimativeCellBasisNumber;
@@ -49,6 +49,8 @@ void ufo::unfold(std::string config_file)
   // 返回值为原子类型和原子质量的对应关系
   auto read_qpoint = [](std::string phonopy_file, std::string qpoint_file, auto& data)
   {
+    biu::Logger::Guard log(phonopy_file, qpoint_file, data);
+
     // phonopy 的输出有两种可能。
     // 直接指定计算的 q 点时，frequency 是 2 维，这时第一个维度是 q 点，第二个维度是不同模式。
     // 计算能带时，frequency 是 3 维，相比于二维的情况多了第一个维度，表示 q 点所在路径。
@@ -100,8 +102,8 @@ void ufo::unfold(std::string config_file)
 
     // 读取并写入其它数据
     YAML::Node phonopy = YAML::LoadFile(phonopy_file);
-    data.Cell = phonopy["unit_cell"]["lattice"].as<std::array<std::array<double, 3>, 3>>() | biu::toEigen<>;
-    auto points = phonopy["points"].as<std::vector<YAML::Node>>();
+    data.Cell = phonopy["unit_cell"]["lattice"].as<Eigen::Matrix3d>();
+    auto points = phonopy["unit_cell"]["points"].as<std::vector<YAML::Node>>();
     data.AtomType = points
       | ranges::views::transform([](const YAML::Node& point) { return point["symbol"].as<std::string>(); })
       | ranges::views::chunk_by(std::ranges::equal_to{})
