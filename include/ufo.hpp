@@ -11,82 +11,92 @@ namespace ufo
   using namespace biu::literals;
   using namespace biu::stream_operators;
 
+  // 许多函数通用的一个结构体
+  struct CommonData
+  {
+    // 原胞相关信息，其中存储的信息是直接读入的，而不是反折叠后的结果
+    struct
+    {
+      // 晶胞，单位为埃，每行代表一个格矢
+      Eigen::Matrix3d Cell;
+      // 原子种类及其个数
+      std::vector<std::pair<std::string, std::size_t>> AtomType;
+      // 原子位置，单位为原胞格矢
+      Eigen::MatrixX3d AtomPosition;
+      // 单胞中每个 q 点的信息
+      struct QpointType
+      {
+        // q 点的坐标，单位为倒格矢
+        Eigen::Vector3d Qpoint;
+        struct ModeType
+        {
+          // 振动频率，单位为 THz
+          double Frequency;
+          // 振动模式，单位为埃
+          Eigen::MatrixX3cd EigenVector;
+          // 拉曼张量
+          // TODO: 单位是什么？
+          std::optional<double> WeightOnRaman;
+          // work around for fpr
+          std::optional<std::array<std::array<double, 3>, 3>> RamanTensor;
+          using serialize = zpp::bits::members<4>;
+        };
+        // 各个模式的的信息
+        std::vector<ModeType> Mode;
+        using serialize = zpp::bits::members<2>;
+      };
+      std::vector<QpointType> Qpoint;
+      using serialize = zpp::bits::members<4>;
+    } Primative;
+
+    // 超胞相关信息，包括反折叠后的信息
+    struct
+    {
+      // 超胞的晶胞，单位为埃，每行代表一个格矢
+      Eigen::Matrix3d Cell;
+      // 单胞与到超胞的变换
+      Eigen::Vector3i CellMultiplier;
+      Eigen::Matrix3d CellDeformation;
+      std::vector<std::pair<std::string, std::size_t>> AtomType;
+      Eigen::MatrixX3d AtomPosition;
+      struct QpointType
+      {
+        Eigen::Vector3d Qpoint;
+        std::vector<Eigen::Vector3d> SubQpoint;
+        struct ModeType
+        {
+          double Frequency;
+          Eigen::MatrixX3cd EigenVector;
+          std::vector<double> WeightOnUnfold;
+          std::optional<double> WeightOnSelectedAtom;
+          std::optional<double> WeightOnRaman;
+          std::optional<std::array<std::array<double, 3>, 3>> RamanTensor;
+          using serialize = zpp::bits::members<6>;
+        };
+        std::vector<ModeType> Mode;
+        using serialize = zpp::bits::members<3>;
+      };
+      std::vector<QpointType> Qpoint;
+      using serialize = zpp::bits::members<6>;
+    } Super;
+
+    // 选择的原子
+    std::optional<std::set<std::size_t>> SelectedAtom;
+
+    // 拉曼散射选择的偏振方向
+    std::optional<std::array<Eigen::Vector3d, 2>> RamanPolarization;
+
+    // 各种原子的质量
+    std::map<std::string, double> AtomMass;
+    using serialize = zpp::bits::members<5>;
+  };
+
   void fold(std::string config_file);
   void unfold(std::string config_file);
+  void project_to_atom(std::string config_file);
   void plot_band(std::string config_file);
   void plot_point(std::string config_file);
   void raman_create_displacement(std::string config_file);
   void raman_extract(std::vector<std::string> files);
   void raman_apply_contribution(std::string config_file);
-
-  // 许多函数都需要用到这个，所以写到头文件中
-  struct UnfoldOutput
-  {
-    Eigen::Matrix3d PrimativeCell;
-    Eigen::Matrix3i SuperCellTransformation;
-    Eigen::Vector3i SuperCellMultiplier;
-    Eigen::Matrix3d SuperCellDeformation;
-    std::optional<std::vector<std::size_t>> SelectedAtoms;
-
-    // 关于各个 Q 点的数据
-    struct QpointDataType
-    {
-      // Q 点的坐标，单位为单胞的倒格矢
-      Eigen::Vector3d Qpoint;
-
-      // 来源于哪个 Q 点, 单位为超胞的倒格矢
-      Eigen::Vector3d Source;
-      std::size_t SourceIndex;
-
-      // 关于这个 Q 点上各个模式的数据
-      struct ModeDataType
-      {
-        // 模式的频率，单位为 THz
-        double Frequency;
-        // 模式的权重
-        double Weight;
-      };
-      std::vector<ModeDataType> ModeData;
-    };
-    std::vector<QpointDataType> QpointData;
-
-    struct MetaQpointDataType
-    {
-      // Q 点的坐标，单位为单胞的倒格矢
-      Eigen::Vector3d Qpoint;
-
-      // 关于这个 Q 点上各个模式的数据
-      struct ModeDataType
-      {
-        // 模式的频率，单位为 THz
-        double Frequency;
-        // 模式中各个原子的运动状态
-        // 这个数据应当是这样得到的：动态矩阵的 eigenvector 乘以 $\exp(-2 \pi i \vec q \cdot \vec r)$
-        // 这个数据可以认为是原子位移中, 关于超胞有周期性的那一部分, 再乘以原子质量的开方.
-        // 这个数据会在 unfold 时被归一化
-        Eigen::MatrixX3cd AtomMovement;
-      };
-      std::vector<ModeDataType> ModeData;
-    };
-    std::vector<MetaQpointDataType> MetaQpointData;
-
-    using serialize = zpp::bits::members<7>;
-  };
-  struct DisplacementOutput
-  {
-    struct ModeData_t
-    {
-      std::size_t MetaQpointIndex;
-      std::size_t ModeIndex;
-      // 每个原子的位移，单位为埃
-      Eigen::MatrixX3d AtomMovement;
-      // 为了使得位移最大的原子的位移恰好是 input.MaxDisplacement, 在位移上乘以了多大的系数
-      double Ratio;
-    };
-    std::vector<ModeData_t> ModeData;
-    Eigen::Vector3d AtomMasses;
-    double MaxDisplacement;
-    std::vector<std::size_t> QpointIndices;
-    using serialize = zpp::bits::members<4>;
-  };
 }

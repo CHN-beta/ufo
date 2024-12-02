@@ -4,9 +4,9 @@
 
 void ufo::plot_band(std::string config_file)
 {
-  struct Input
+  struct Config
   {
-    std::string UnfoldedDataFile;
+    std::string InputDataFile;
     // 要画图的 q 点路径列表
     // 内层表示一个路径上的 q 点，外层表示不同的路径
     // 单位为倒格矢
@@ -29,26 +29,26 @@ void ufo::plot_band(std::string config_file)
     std::optional<std::string> OutputDataFile;
   };
 
-  // 根据 q 点路径, 搜索要使用的 q 点，返回的是 q 点在 QpointData 中的索引以及到路径起点的距离，以及这段路径的总长度
+  // 根据 q 点路径, 搜索要使用的 q 点，返回的是超胞中 Qpint 的索引和 SubQpoint 的索引，以及到路径起点的距离，以及这段路径的总长度
   auto search_qpoints = []
   (
     const Eigen::Matrix3d& primative_cell,
     const std::pair<Eigen::Vector3d, Eigen::Vector3d>& path,
-    const std::vector<Eigen::Vector3d>& qpoints,
+    const std::vector<std::vector<Eigen::Vector3d>>& qpoints,
     double threshold, bool exclude_endpoint = false
   )
   {
     // 对于 output 中的每一个点, 检查这个点是否在路径上. 如果在, 把它加入到 selected_qpoints 中
     // 键为这个点到起点的距离
-    boost::container::flat_map<double, std::size_t> selected_qpoints;
+    boost::container::flat_map<double, std::pair<std::size_t, std::size_t>> selected_qpoints;
     auto begin = (path.first.transpose() * primative_cell.reverse()).transpose().eval();
     auto end = (path.second.transpose() * primative_cell.reverse()).transpose().eval();
-    for (std::size_t i = 0; i < qpoints.size(); i++)
+    for (std::size_t i = 0; i < qpoints.size(); i++) for (std::size_t j = 0; j < qpoints[i].size(); j++)
       for (auto cell_shift
         : biu::sequence(Eigen::Vector3i(-1, -1, -1), Eigen::Vector3i(2, 2, 2)))
       {
-        auto qpoint
-          = ((qpoints[i] + cell_shift.first.cast<double>()).transpose() * primative_cell.reverse()).transpose().eval();
+        Eigen::Vector3d qpoint
+          = primative_cell.reverse().transpose() * (qpoints[i][j] + cell_shift.first.cast<double>());
         // 计算这个点到前两个点所在直线的距离
         auto distance = (end - begin).cross(qpoint - begin).norm()
           / (path.second - path.first).norm();
@@ -61,7 +61,8 @@ void ufo::plot_band(std::string config_file)
           auto distance3 = (end - begin).norm();
           if (distance1 < distance3 + threshold && distance2 < distance3 + threshold)
             // 如果这个点不在终点处, 或者不排除终点, 则加入
-            if (distance2 > threshold || !exclude_endpoint) selected_qpoints.emplace(distance1, i);
+            if (distance2 > threshold || !exclude_endpoint)
+              selected_qpoints.emplace(distance1, std::pair{i, j});
         }
       }
     // 去除非常接近的点
@@ -80,11 +81,13 @@ void ufo::plot_band(std::string config_file)
   auto calculate_values = []
   (
     // search_qpoints 的第一个返回值
-    const boost::container::flat_map<double, std::size_t>& path,
+    const boost::container::flat_map<double, std::pair<std::size_t, std::size_t>>& path,
     // 每一条连续路径的第一个 q 点的索引
     const std::set<std::size_t>& path_begin,
-    // 所有 q 点的数据（需要用到它的频率和权重）
-    const std::vector<UnfoldOutput::QpointDataType>& qpoints,
+    // 各个模式的频率和权重，几个维度分别为：MetaQpointIndex, ModeIndex
+    const std::vector<std::vector<double>>& frequency,
+    // 各个模式的权重，几个维度分别为：MetaQpointIndex, ModeIndex, SubQpointIndex
+    const std::vector<std::vector<std::vector<double>>>& weight,
     // 用于插值的分辨率和范围
     const std::array<std::size_t, 2>& resolution,
     const std::array<double, 2>& frequency_range,
@@ -96,7 +99,7 @@ void ufo::plot_band(std::string config_file)
     auto blend = [&]
     (
       // 两个点的索引
-      std::size_t a, std::size_t b,
+      std::pair<std::size_t, std::size_t> a, std::pair<std::size_t, std::size_t> b,
       // 按照连续路径混合还是按照断开的路径混合
       bool continuous,
       // 第一个点占的比例
@@ -105,38 +108,36 @@ void ufo::plot_band(std::string config_file)
     ) -> std::vector<double>
     {
       // 混合得到的频率和权重
-      std::vector<double> frequency, weight;
+      std::vector<double> frequency_result, weight_result;
       // 如果是连续路径，将每个模式的频率和权重按照比例混合
       if (continuous)
       {
-        assert(qpoints[a].ModeData.size() == qpoints[b].ModeData.size());
-        for (std::size_t i = 0; i < qpoints[a].ModeData.size(); i++)
+        for (std::size_t i = 0; i < frequency[a.first].size(); i++)
         {
-          frequency.push_back
-            (qpoints[a].ModeData[i].Frequency * ratio + qpoints[b].ModeData[i].Frequency * (1 - ratio));
-          weight.push_back(qpoints[a].ModeData[i].Weight * ratio + qpoints[b].ModeData[i].Weight * (1 - ratio));
+          frequency_result.push_back(frequency[a.first][i] * ratio + frequency[b.first][i] * (1 - ratio));
+          weight_result.push_back(weight[a.first][i][a.second] * ratio + weight[b.first][i][b.second] * (1 - ratio));
         }
       }
       // 如果是不连续路径，将每个模式的权重乘以比例，最后相加
       else
       {
-        for (std::size_t i = 0; i < qpoints[a].ModeData.size(); i++)
+        for (std::size_t i = 0; i < frequency[a.first].size(); i++)
         {
-          frequency.push_back(qpoints[a].ModeData[i].Frequency);
-          weight.push_back(qpoints[a].ModeData[i].Weight * ratio);
+          frequency_result.push_back(frequency[a.first][i]);
+          weight_result.push_back(weight[a.first][i][a.second] * ratio);
         }
-        for (std::size_t i = 0; i < qpoints[b].ModeData.size(); i++)
+        for (std::size_t i = 0; i < frequency[b.first].size(); i++)
         {
-          frequency.push_back(qpoints[b].ModeData[i].Frequency);
-          weight.push_back(qpoints[b].ModeData[i].Weight * (1 - ratio));
+          frequency_result.push_back(frequency[b.first][i]);
+          weight_result.push_back(weight[b.first][i][b.second] * (1 - ratio));
         }
       }
       std::vector<double> result(resolution);
-      for (std::size_t i = 0; i < frequency.size(); i++)
+      for (std::size_t i = 0; i < frequency_result.size(); i++)
       {
-        std::ptrdiff_t index = (frequency[i] - frequency_range[0]) / (frequency_range[1] - frequency_range[0])
+        std::ptrdiff_t index = (frequency_result[i] - frequency_range[0]) / (frequency_range[1] - frequency_range[0])
           * resolution;
-        if (index >= 0 && index < static_cast<std::ptrdiff_t>(resolution)) result[index] += weight[i];
+        if (index >= 0 && index < static_cast<std::ptrdiff_t>(resolution)) result[index] += weight_result[i];
       }
       return result;
     };
@@ -155,7 +156,8 @@ void ufo::plot_band(std::string config_file)
       ));
       else values.push_back(blend
       (
-        std::prev(it)->second, it->second, !path_begin.contains(it->second),
+        std::prev(it)->second, it->second,
+        !path_begin.contains(std::distance(path.begin(), it)),
         (it->first - current_distance) / (it->first - std::prev(it)->first),
         resolution[1], frequency_range
       ));
@@ -216,19 +218,19 @@ void ufo::plot_band(std::string config_file)
     f->save(filename, "png");
   };
 
-  auto input = YAML::LoadFile(config_file).as<Input>();
-  auto unfolded_data = biu::deserialize<UnfoldOutput>
-    (biu::read<std::byte>(input.UnfoldedDataFile));
+  auto config = YAML::LoadFile(config_file).as<Config>();
+  auto input = biu::deserialize<CommonData>
+    (biu::read<std::byte>(config.InputDataFile));
   
   // 搜索画图需要用到的 q 点
   // key 到起点的距离，value 为 q 点在 QpointData 中的索引
-  boost::container::flat_map<double, std::size_t> path;
+  boost::container::flat_map<double, std::pair<std::size_t, std::size_t>> path;
   // 每一条连续路径的第一个 q 点在 path 中的索引
   std::set<std::size_t> path_begin;
   // x 轴的刻度，为 path 中的索引
   std::set<std::size_t> x_ticks_index;
   double total_distance = 0;
-  for (auto& line : input.Qpoints)
+  for (auto& line : config.Qpoints)
   {
     assert(line.size() >= 2);
     path_begin.insert(path.size());
@@ -237,11 +239,11 @@ void ufo::plot_band(std::string config_file)
       x_ticks_index.insert(path.size());
       auto [this_path, this_distance] = search_qpoints
       (
-        unfolded_data.PrimativeCell, {line[i], line[i + 1]},
-        unfolded_data.QpointData
-          | ranges::views::transform(&UnfoldOutput::QpointDataType::Qpoint)
+        input.Primative.Cell, {line[i], line[i + 1]},
+        input.Super.Qpoint
+          | ranges::views::transform([](auto& qpoint) { return qpoint.SubQpoint; })
           | ranges::to_vector,
-        input.ThresholdWhenSearchingQpoints.value_or(0.001),
+        config.ThresholdWhenSearchingQpoints.value_or(0.001),
         i != line.size() - 2
       );
       path.merge
@@ -258,39 +260,59 @@ void ufo::plot_band(std::string config_file)
   // 计算画图的数据
   auto values = calculate_values
   (
-    path, path_begin, unfolded_data.QpointData, input.InterpolationResolution,
-    input.FrequencyRange, total_distance
+    path, path_begin,
+    input.Super.Qpoint
+      | ranges::views::transform([](auto& qpoint)
+      {
+        return qpoint.Mode | ranges::views::transform([](auto&& mode) { return mode.Frequency; }) | ranges::to_vector;
+      })
+      | ranges::to_vector,
+    input.Super.Qpoint
+      | ranges::views::transform([](auto& qpoint)
+      {
+        return qpoint.Mode
+          | ranges::views::transform([](auto&& mode)
+          {
+            return mode.WeightOnUnfold
+              | ranges::views::transform([&](auto&& weight)
+                { return weight * mode.WeightOnSelectedAtom.value_or(1) * mode.WeightOnRaman.value_or(1); })
+              | ranges::to_vector;
+          })
+          | ranges::to_vector;
+      })
+      | ranges::to_vector,
+    config.InterpolationResolution, config.FrequencyRange, total_distance
   );
   auto x_ticks = x_ticks_index | ranges::views::transform([&](auto i)
-    { return path.nth(i)->first / total_distance * input.InterpolationResolution[0]; }) | ranges::to<std::vector>;
-  auto y_ticks = input.YTicks.value_or(std::vector<std::pair<double, std::string>>{})
+    { return path.nth(i)->first / total_distance * config.InterpolationResolution[0]; }) | ranges::to_vector;
+  auto y_ticks = config.YTicks.value_or(std::vector<std::pair<double, std::string>>{})
     | biu::toLvalue | ranges::views::keys
     | ranges::views::transform([&](auto i)
     {
-      return (i - input.FrequencyRange[0]) / (input.FrequencyRange[1] - input.FrequencyRange[0])
-        * input.InterpolationResolution[1];
+      return (i - config.FrequencyRange[0]) / (config.FrequencyRange[1] - config.FrequencyRange[0])
+        * config.InterpolationResolution[1];
     })
     | ranges::to_vector;
-  auto y_ticklabels = input.YTicks.value_or(std::vector<std::pair<double, std::string>>{})
+  auto y_ticklabels = config.YTicks.value_or(std::vector<std::pair<double, std::string>>{})
     | biu::toLvalue | ranges::views::values | ranges::to_vector;
-  if (input.OutputPictureFile) plot
+  if (config.OutputPictureFile) plot
   (
-    values, input.OutputPictureFile.value(),
-    x_ticks, y_ticks, y_ticklabels, input.AspectRatio, input.PictureResolution
+    values, config.OutputPictureFile.value(),
+    x_ticks, y_ticks, y_ticklabels, config.AspectRatio, config.PictureResolution
   );
-  if (input.OutputDataFile)
-    biu::Hdf5file(input.OutputDataFile.value(), true)
+  if (config.OutputDataFile)
+    biu::Hdf5file(config.OutputDataFile.value(), true)
       .write("Values", values)
       .write("XTicks", x_ticks)
       .write("YTicks", y_ticks)
       .write("YTickLabels", y_ticklabels)
-      .write("InterpolationResolution", input.InterpolationResolution)
-      .write("FrequencyRange", input.FrequencyRange);
+      .write("InterpolationResolution", config.InterpolationResolution)
+      .write("FrequencyRange", config.FrequencyRange);
 }
 
 void ufo::plot_point(std::string config_file)
 {
-  struct Input
+  struct Config
   {
     std::string UnfoldedDataFile;
     // 要画图的 q 点
@@ -317,19 +339,20 @@ void ufo::plot_point(std::string config_file)
   auto search_qpoints = []
   (
     const Eigen::Matrix3d& primative_cell,
-    const Eigen::Vector3d& qpoint, const std::vector<Eigen::Vector3d>& qpoints,
+    const Eigen::Vector3d& qpoint, const std::vector<std::vector<Eigen::Vector3d>>& qpoints,
     double threshold
   )
   {
     biu::Logger::Guard log(qpoint);
     // 对于 output 中的每一个点, 检查这个点是否与所寻找的点足够近，如果足够近则返回
-    for (std::size_t i = 0; i < qpoints.size(); i++)
+    for (std::size_t i = 0; i < qpoints.size(); i++) for (std::size_t j = 0; j < qpoints[i].size(); j++)
       for (auto cell_shift
         : biu::sequence(Eigen::Vector3i(-1, -1, -1), Eigen::Vector3i(2, 2, 2)))
       {
         auto this_qpoint
-          = (primative_cell.reverse().transpose() * (qpoints[i] + cell_shift.first.cast<double>())).eval();
-        if ((this_qpoint - primative_cell.reverse().transpose() * qpoint).norm() < threshold) return log.rtn(i);
+          = (primative_cell.reverse().transpose() * (qpoints[i][j] + cell_shift.first.cast<double>())).eval();
+        if ((this_qpoint - primative_cell.reverse().transpose() * qpoint).norm() < threshold)
+          return log.rtn(std::pair(i, j));
       }
     throw std::runtime_error("No q points found");
   };
@@ -338,7 +361,8 @@ void ufo::plot_point(std::string config_file)
   auto calculate_values = []
   (
     // q 点的数据（需要用到它的频率和权重）
-    const UnfoldOutput::QpointDataType& qpoint,
+    const std::vector<double>& frequency,
+    const std::vector<double>& weight,
     // 用于插值的分辨率和范围
     std::size_t resolution,
     const std::array<double, 2>& frequency_range
@@ -346,12 +370,12 @@ void ufo::plot_point(std::string config_file)
   {
     biu::Logger::Guard log;
     std::vector<double> result(resolution);
-    for (auto& mode : qpoint.ModeData)
+    for (std::size_t i = 0; i < frequency.size(); i++)
     {
-      double index_double = (mode.Frequency - frequency_range[0]) / (frequency_range[1] - frequency_range[0])
+      double index_double = (frequency[i] - frequency_range[0]) / (frequency_range[1] - frequency_range[0])
         * (resolution - 1);
       std::ptrdiff_t index = std::round(index_double);
-      if (index >= 0 && index < static_cast<std::ptrdiff_t>(resolution)) result[index] += mode.Weight;
+      if (index >= 0 && index < static_cast<std::ptrdiff_t>(resolution)) result[index] += weight[i];
     }
     return log.rtn(result);
   };
@@ -387,45 +411,55 @@ void ufo::plot_point(std::string config_file)
   };
 
   biu::Logger::Guard log;
-  auto input = YAML::LoadFile(config_file).as<Input>();
-  auto unfolded_data = biu::deserialize<UnfoldOutput>
-    (biu::read<std::byte>(input.UnfoldedDataFile));
+  auto config = YAML::LoadFile(config_file).as<Config>();
+  auto input = biu::deserialize<CommonData>
+    (biu::read<std::byte>(config.UnfoldedDataFile));
   
   auto qpoint_index = search_qpoints
   (
-    unfolded_data.PrimativeCell, input.Qpoint,
-    unfolded_data.QpointData
-      | ranges::views::transform(&UnfoldOutput::QpointDataType::Qpoint)
+    input.Primative.Cell, config.Qpoint,
+    input.Super.Qpoint
+      | ranges::views::transform([](auto& qpoint) { return qpoint.SubQpoint; })
       | ranges::to_vector,
-    input.ThresholdWhenSearchingQpoints.value_or(0.001)
+    config.ThresholdWhenSearchingQpoints.value_or(0.001)
   );
   auto values = calculate_values
   (
-    unfolded_data.QpointData[qpoint_index],
-    input.InterpolationResolution, input.FrequencyRange
+    input.Super.Qpoint[qpoint_index.first].Mode
+      | ranges::views::transform([](auto&& mode) { return mode.Frequency; })
+      | ranges::to_vector,
+    input.Super.Qpoint[qpoint_index.first].Mode
+      | ranges::views::transform([&](auto&& mode)
+      {
+        return mode.WeightOnUnfold[qpoint_index.second]
+          * mode.WeightOnSelectedAtom.value_or(1) * mode.WeightOnRaman.value_or(1);
+      })
+      | ranges::to_vector,
+    config.InterpolationResolution, config.FrequencyRange
   );
-  auto x_ticks = input.XTicks.value_or(std::vector<std::pair<double, std::string>>{})
+  auto x_ticks = config.XTicks.value_or(std::vector<std::pair<double, std::string>>{})
     | biu::toLvalue | ranges::views::keys
     | ranges::views::transform([&](auto i)
     {
-      return (i - input.FrequencyRange[0]) / (input.FrequencyRange[1] - input.FrequencyRange[0])
-        * input.InterpolationResolution;
+      return (i - config.FrequencyRange[0]) / (config.FrequencyRange[1] - config.FrequencyRange[0])
+        * config.InterpolationResolution;
     })
     | ranges::to_vector;
-  auto x_ticklabels = input.XTicks.value_or(std::vector<std::pair<double, std::string>>{})
+  auto x_ticklabels = config.XTicks.value_or(std::vector<std::pair<double, std::string>>{})
     | biu::toLvalue | ranges::views::values | ranges::to_vector;
-  if (input.OutputPictureFile) plot
+  if (config.OutputPictureFile) plot
   (
-    values, input.OutputPictureFile.value(),
-    x_ticks, x_ticklabels, input.AspectRatio, input.PictureResolution
+    values, config.OutputPictureFile.value(),
+    x_ticks, x_ticklabels, config.AspectRatio, config.PictureResolution
   );
-  if (input.OutputDataFile)
-    biu::Hdf5file(input.OutputDataFile.value(), true)
+  if (config.OutputDataFile)
+    biu::Hdf5file(config.OutputDataFile.value(), true)
       .write("Values", values)
       .write("XTicks", x_ticks)
       .write("XTickLabels", x_ticklabels)
-      .write("InterpolationResolution", input.InterpolationResolution)
-      .write("FrequencyRange", input.FrequencyRange);
-  if (input.OutputRawDataFile)
-    std::ofstream(*input.OutputRawDataFile) << YAML::Node(unfolded_data.QpointData[qpoint_index]);
+      .write("InterpolationResolution", config.InterpolationResolution)
+      .write("FrequencyRange", config.FrequencyRange);
+  // TODO: pfr + optional + Eigen Matrix = failed
+  if (config.OutputRawDataFile)
+    std::ofstream(*config.OutputRawDataFile) << YAML::Node(values);
 }

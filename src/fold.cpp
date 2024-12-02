@@ -2,17 +2,13 @@
 
 void ufo::fold(std::string config_file)
 {
-  struct Input
+  struct Config
   {
     Eigen::Matrix3d SuperCellDeformation;
     Eigen::Vector3i SuperCellMultiplier;
     std::vector<Eigen::Vector3d> Qpoints;
-    std::optional<std::string> OutputFile;
   };
-  struct Output
-  {
-    std::vector<Eigen::Vector3d> Qpoints;
-  };
+
   auto fold = []
   (
     Eigen::Vector3d qpoint_in_reciprocal_primitive_cell_by_reciprocal_primitive_cell,
@@ -44,15 +40,13 @@ void ufo::fold(std::string config_file)
     */
     return (qpoint_by_reciprocal_super_cell.array() - qpoint_by_reciprocal_super_cell.array().floor()).matrix();
   };
-  auto input = YAML::LoadFile(config_file).as<Input>();
-  Output output;
-  output.Qpoints = input.Qpoints
-    | ranges::views::transform([&](auto& qpoint)
-    {
-      return fold(qpoint, input.SuperCellDeformation * input.SuperCellMultiplier.cast<double>().asDiagonal());
-    })
-    | ranges::to_vector;
-  
-  // 默认的输出太丑了，但是不想手动写了，忍一下
-  std::ofstream(input.OutputFile.value_or("output.yaml")) << YAML::Node(output);
+
+  biu::Logger::Guard log(config_file);
+  auto input = YAML::LoadFile(config_file).as<Config>();
+  for (const auto& qpoint : input.Qpoints) log.info("{} -> {}"_f
+    (
+      qpoint,
+      fold(qpoint,
+        input.SuperCellDeformation * input.SuperCellMultiplier.cast<double>().asDiagonal())
+    ));
 }

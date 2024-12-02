@@ -14,14 +14,14 @@ find_package(Matplot++ REQUIRED)
 find_package(biu REQUIRED)
 find_package(Threads REQUIRED)
 
-add_executable(ufo src/fold.cpp src/unfold.cpp src/plot.cpp src/raman-create-displacement.cpp src/raman-extract.cpp
-  src/raman-apply-contribution.cpp src/main.cpp)
+add_executable(ufo src/fold.cpp src/unfold.cpp src/plot.cpp src/raman.cpp src/project-to-atom.cpp src/main.cpp)
 target_include_directories(ufo PRIVATE ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(ufo PRIVATE TBB::tbb Matplot++::matplot biu::biu)
 target_compile_features(ufo PRIVATE cxx_std_23)
 target_compile_options(ufo PRIVATE -fexperimental-library)
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   target_compile_definitions(ufo PRIVATE BIU_LOGGER_DEBUG BIU_LOGGER_SOURCE_ROOT="${CMAKE_SOURCE_DIR}")
+  target_compile_options(ufo PRIVATE -ftemplate-backtrace-limit=0)
 endif()
 
 install(TARGETS ufo RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

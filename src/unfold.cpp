@@ -2,6 +2,7 @@
 # include <thread>
 # include <syncstream>
 # include <execution>
+# include <ranges>
 
 void ufo::unfold(std::string config_file)
 {
@@ -13,11 +14,8 @@ void ufo::unfold(std::string config_file)
   // 只要第一部分取得足够多, 那么单胞中原子的状态就可以完全被这些平面波描述.
   // 将超胞中原子的运动状态投影到这些基矢上, 计算出投影的系数, 就可以将超胞的原子运动状态分解到单胞中的多个 q 点上.
 
-  struct Input
+  struct Config
   {
-    // 单胞的三个格矢，每行表示一个格矢的坐标，单位为埃
-    Eigen::Matrix3d PrimativeCell;
-
     // 单胞到超胞的格矢转换时用到的矩阵
     // SuperCellMultiplier 是一个三维列向量且各个元素都是整数，表示单胞在各个方向扩大到多少倍之后，可以得到和超胞一样的体积
     // SuperCellDeformation 是一个行列式为 1 的矩阵，它表示经过 SuperCellMultiplier 扩大后，还需要怎样的变换才能得到超胞
@@ -35,40 +33,32 @@ void ufo::unfold(std::string config_file)
     // 在单胞内取几个平面波的基矢
     Eigen::Vector<std::size_t, 3> PrimativeCellBasisNumber;
 
-    // 超胞中原子的坐标，每行表示一个原子的坐标，单位为超胞的格矢
-    Eigen::MatrixX3d AtomPositionBySuperCell;
+    // 单胞的 phonopy 输出的 phonopy.yaml，用来读入单胞的晶格、原子坐标、原子类型、原子质量
+    std::string PrimativePhonopy;
+    // 单胞的 phonopy 输出的 band.hdf5 或 qpoint.hdf5，用来读入 q 点和振动模式
+    std::string PrimativeQpoint;
+    // 同上，但是是超胞里的结果
+    std::string SuperPhonopy;
+    std::string SuperQpoint;
 
-    // 从 band.hdf5 读入 QpointData
-    std::optional<std::string> QpointDataInputFile;
-
-    // 输出到哪些文件
-    struct QpointDataOutputFileType
-    {
-      std::string Filename;
-
-      // 如果指定，则将结果投影到那些原子上
-      std::optional<std::vector<std::size_t>> SelectedAtoms;
-
-      // 默认输出为 zpp 文件，如果指定为 true，则输出为 yaml 文件
-      std::optional<bool> OutputAsYaml;
-    };
-    std::vector<QpointDataOutputFileType> QpointDataOutputFile;
+    std::string OutputFile;
   };
 
-  // 从文件中读取 QpointData
-  auto read_qpoint_data = [](std::string filename)
+  // 从文件中读取 q 点数据
+  // data 为 CommonData::Primative 或 CommonData::Super
+  // 返回值为原子类型和原子质量的对应关系
+  auto read_qpoint = [](std::string phonopy_file, std::string qpoint_file, auto& data)
   {
-    // 读入原始数据
-    // phonopy 的输出有两种可能
-    // 直接指定计算的 q 点时，frequency 是 2 维，这时第一个维度是 q 点，第二个维度是不同模式
-    // 计算能带时，frequency 是 3 维，相比于二维的情况多了第一个维度，表示 q 点所在路径
-    // qpoint 或 path，以及 eigenvector 也有类似的变化
-    // eigenvector 是三维或四维的数组，后两个维度分别表示原子运动和模式（而不是模式和原子），
-    //  因为后两个维度的尺寸总是一样的（模式个数等于原子坐标个数），非常容易搞错
+    // phonopy 的输出有两种可能。
+    // 直接指定计算的 q 点时，frequency 是 2 维，这时第一个维度是 q 点，第二个维度是不同模式。
+    // 计算能带时，frequency 是 3 维，相比于二维的情况多了第一个维度，表示 q 点所在路径。
+    // qpoint 或 path，以及 eigenvector 也有类似的变化。
+    // 除此以外，eigenvector 后两个维度分别指示模式的特征向量的各个维度和各个模式（而不是各个模式和特征向量的各个维度），
+    // 因为后两个维度的尺寸总是一样的（模式个数等于原子坐标个数），非常容易搞错。
     std::vector<std::array<double, 3>> qpoint;
     std::vector<std::vector<double>> frequency;
-    std::vector<std::vector<std::vector<biu::PhonopyComplex>>> eigenvector_vector;
-    auto file = biu::Hdf5file(filename);
+    std::vector<std::vector<std::vector<std::complex<double>>>> eigenvector_vector;
+    auto file = biu::Hdf5file(qpoint_file);
 
     if (file.File.getDataSet("/frequency").getDimensions().size() == 2)
       file.read("/frequency", frequency)
@@ -78,7 +68,7 @@ void ufo::unfold(std::string config_file)
     {
       std::vector<std::vector<std::array<double, 3>>> temp_path;
       std::vector<std::vector<std::vector<double>>> temp_frequency;
-      std::vector<std::vector<std::vector<std::vector<biu::PhonopyComplex>>>> temp_eigenvector_vector;
+      std::vector<std::vector<std::vector<std::vector<std::complex<double>>>>> temp_eigenvector_vector;
       file.read("/frequency", temp_frequency)
         .read("/eigenvector", temp_eigenvector_vector)
         .read("/path", temp_path);
@@ -87,27 +77,47 @@ void ufo::unfold(std::string config_file)
       eigenvector_vector = temp_eigenvector_vector | ranges::views::join | ranges::to_vector;
     }
 
-    // 整理得到结果
-    auto number_of_qpoints = frequency.size(), num_of_modes = frequency[0].size();
-    std::vector<UnfoldOutput::MetaQpointDataType> qpoint_data(number_of_qpoints);
-    for (std::size_t i = 0; i < number_of_qpoints; i++)
+    // 整理并写入得到结果
+    auto number_of_qpoints = frequency.size(), number_of_modes = frequency[0].size();
+    data.Qpoint.resize(number_of_qpoints);
+    for (auto i : std::views::iota(0u, number_of_qpoints)) 
     {
-      qpoint_data[i].Qpoint = qpoint[i] | biu::toEigen<>;
-      qpoint_data[i].ModeData.resize(num_of_modes);
-      for (std::size_t j = 0; j < num_of_modes; j++)
+      data.Qpoint[i].Qpoint = qpoint[i] | biu::toEigen<>;
+      data.Qpoint[i].Mode.resize(number_of_modes);
+      for (auto j : std::views::iota(0u, number_of_modes)) 
       {
-        qpoint_data[i].ModeData[j].Frequency = frequency[i][j];
-        auto number_of_atoms = eigenvector_vector[i].size() / 3;
-        Eigen::MatrixX3cd eigenvectors(number_of_atoms, 3);
-        for (std::size_t k = 0; k < number_of_atoms; k++) for (std::size_t l = 0; l < 3; l++)
-          eigenvectors(k, l)
-            = eigenvector_vector[i][k * 3 + l][j].r + eigenvector_vector[i][k * 3 + l][j].i * 1i;
+        data.Qpoint[i].Mode[j].Frequency = frequency[i][j];
+        auto number_of_atoms = number_of_modes / 3;
+        Eigen::MatrixX3cd eigenvector(number_of_atoms, 3);
+        for (auto k : std::views::iota(0u, number_of_atoms))
+          for (auto l : std::views::iota(0u, 3u))
+            eigenvector(k, l) = eigenvector_vector[i][k * 3 + l][j];
         // 原则上讲，需要对读入的原子运动状态作相位转换, 使得它们与我们的约定一致(对超胞周期性重复)，但这个转换 phonopy 已经做了
         // 这里还要需要做归一化处理 (指将数据简单地作为向量处理的归一化)
-        qpoint_data[i].ModeData[j].AtomMovement = eigenvectors / eigenvectors.norm();
+        data.Qpoint[i].Mode[j].EigenVector = eigenvector / eigenvector.norm();
       }
     }
-    return qpoint_data;
+
+    // 读取并写入其它数据
+    YAML::Node phonopy = YAML::LoadFile(phonopy_file);
+    data.Cell = phonopy["unit_cell"]["lattice"].as<std::array<std::array<double, 3>, 3>>() | biu::toEigen<>;
+    auto points = phonopy["points"].as<std::vector<YAML::Node>>();
+    data.AtomType = points
+      | ranges::views::transform([](const YAML::Node& point) { return point["symbol"].as<std::string>(); })
+      | ranges::views::chunk_by(std::ranges::equal_to{})
+      | ranges::views::transform([](const auto& chunk) { return std::pair{chunk[0], chunk.size()}; })
+      | ranges::to_vector;
+    data.AtomPosition = points
+      | ranges::views::transform([](const YAML::Node& point)
+        { return point["coordinates"].as<std::array<double, 3>>(); })
+      | ranges::to_vector
+      | biu::toEigen<>;
+    return points
+      | ranges::views::transform([](const YAML::Node& point)
+        { return std::pair(point["symbol"].as<std::string>(), point["mass"].as<double>()); })
+      | ranges::views::chunk_by(std::ranges::equal_to{})
+      | ranges::views::transform([](const auto& chunk) { return chunk[0]; })
+      | ranges::to<std::map<std::string, double>>;
   };
 
   // 构建基
@@ -151,31 +161,25 @@ void ufo::unfold(std::string config_file)
   auto construct_projection_coefficient = []
   (
     const std::vector<std::vector<Eigen::VectorXcd>>& basis,
-    // 实际上只需要其中的 AtomMovement
-    const std::vector<UnfoldOutput::MetaQpointDataType>& qpoint_data,
+    const std::vector<std::reference_wrapper<const Eigen::MatrixX3cd>>& modes,
     std::atomic<std::size_t>& number_of_finished_modes
   )
   {
-    // 将所有的模式取出，组成一个一维数组，稍后并行计算
-    std::vector<std::reference_wrapper<const Eigen::MatrixX3cd>> mode_data;
-    for (auto& qpoint : qpoint_data) for (auto& mode : qpoint.ModeData)
-      mode_data.emplace_back(mode.AtomMovement);
     // 第一层下标对应不同模式, 第二层下标对应这个模式在反折叠后的 q 点(sub qpoint)
-    std::vector<std::vector<double>> projection_coefficient(mode_data.size());
+    std::vector<std::vector<double>> projection_coefficient(modes.size());
     // 对每个模式并行
     std::transform
     (
-      std::execution::par_unseq, mode_data.begin(), mode_data.end(),
+      std::execution::par, modes.begin(), modes.end(),
       projection_coefficient.begin(), [&](const auto& mode_data)
       {
         // 这里, mode_data 和 projection_coefficient 均指对应于一个模式的数据
         std::vector<double> projection_coefficient(basis.size());
-        for (std::size_t i_of_sub_qpoint = 0; i_of_sub_qpoint < basis.size(); i_of_sub_qpoint++)
+        for (auto i_of_sub_qpoint : std::views::iota(0u, basis.size()))
           // 对于 basis 中, 对应于单胞倒格子的部分, 以及对应于不同方向的部分, 分别求内积, 然后求模方和
-          for (std::size_t i_of_basis = 0; i_of_basis < basis[i_of_sub_qpoint].size(); i_of_basis++)
+          for (auto i_of_basis : std::views::iota(0u, basis[i_of_sub_qpoint].size()))
             projection_coefficient[i_of_sub_qpoint] +=
-              (basis[i_of_sub_qpoint][i_of_basis].transpose().conjugate() * mode_data.get())
-                .array().abs2().sum();
+              (basis[i_of_sub_qpoint][i_of_basis].transpose().conjugate() * mode_data.get()).array().abs2().sum();
         // 如果是严格地将向量分解到一组完备的基矢上, 那么不需要对计算得到的权重再做归一化处理
         // 但这里并不是这样一个严格的概念. 因此对分解到各个 sub qpoint 上的权重做归一化处理
         auto sum = ranges::accumulate(projection_coefficient, 0.);
@@ -184,162 +188,81 @@ void ufo::unfold(std::string config_file)
         return projection_coefficient;
       }
     );
-    // 将计算得到的投影系数重新组装成三维数组
-    // 第一维是 meta qpoint，第二维是模式，第三维是 sub qpoint
-    std::vector<std::vector<std::vector<double>>> projection_coefficient_output;
-    for
-    (
-      std::size_t i_of_meta_qpoint = 0, num_of_mode_manipulated = 0;
-      i_of_meta_qpoint < qpoint_data.size();
-      i_of_meta_qpoint++, num_of_mode_manipulated += qpoint_data[i_of_meta_qpoint].ModeData.size()
-    )
-      projection_coefficient_output.emplace_back
-      (
-        projection_coefficient.begin() + num_of_mode_manipulated,
-        projection_coefficient.begin() + num_of_mode_manipulated + qpoint_data[i_of_meta_qpoint].ModeData.size()
-      );
-    return projection_coefficient_output;
-  };
-
-  // 组装输出，即将投影系数应用到原始数据上
-  auto construct_output = []
-  (
-    const Input& input,
-    const std::vector<std::vector<std::vector<double>>>& projection_coefficient,
-    const std::vector<UnfoldOutput::MetaQpointDataType>& qpoint_data,
-    const std::optional<std::vector<std::size_t>>& selected_atoms
-  )
-  {
-    UnfoldOutput output;
-    output.PrimativeCell = input.PrimativeCell;
-    output.SuperCellMultiplier = input.SuperCellMultiplier;
-    output.SuperCellDeformation = input.SuperCellDeformation;
-    output.SelectedAtoms = selected_atoms;
-    output.MetaQpointData = qpoint_data;
-    for (std::size_t i_of_meta_qpoint = 0; i_of_meta_qpoint < qpoint_data.size(); i_of_meta_qpoint++)
-    {
-      // 如果需要投影到特定的原子上，需要先计算当前 meta qpoint 的不同模式的投影系数
-      std::optional<std::vector<double>> projection_coefficient_on_atoms;
-      if (selected_atoms)
-      {
-        projection_coefficient_on_atoms.emplace();
-        for (std::size_t i_of_mode = 0; i_of_mode < qpoint_data[i_of_meta_qpoint].ModeData.size(); i_of_mode++)
-        {
-          projection_coefficient_on_atoms->emplace_back(0);
-          for (auto atom : *selected_atoms)
-            projection_coefficient_on_atoms->back()
-              += qpoint_data[i_of_meta_qpoint].ModeData[i_of_mode].AtomMovement.row(atom).array().abs2().sum();
-          projection_coefficient_on_atoms->back() *=
-            static_cast<double>(qpoint_data[i_of_meta_qpoint].ModeData[i_of_mode].AtomMovement.rows())
-              / selected_atoms->size();
-        }
-      }
-
-      for
-      (
-        auto [diff_of_sub_qpoint_by_reciprocal_modified_super_cell, i_of_sub_qpoint]
-          : biu::sequence(input.SuperCellMultiplier)
-      )
-      {
-        auto& _ = output.QpointData.emplace_back();
-        /*
-          SubQpointByReciprocalModifiedSuperCell = XyzOfDiffOfSubQpointByReciprocalModifiedSuperCell +
-            MetaQpointByReciprocalModifiedSuperCell;
-          SubQpoint = SubQpointByReciprocalModifiedSuperCell.transpose() * ReciprocalModifiedSuperCell;
-          SubQpoint = SubQpointByReciprocalPrimativeCell.transpose() * ReciprocalPrimativeCell;
-          ReciprocalModifiedSuperCell = ModifiedSuperCell.inverse().transpose();
-          ReciprocalPrimativeCell = PrimativeCell.inverse().transpose();
-          ModifiedSuperCell = SuperCellMultiplier.asDiagonal() * PrimativeCell;
-          MetaQpoint = MetaQpointByReciprocalModifiedSuperCell.transpose() * ReciprocalModifiedSuperCell;
-          MetaQpoint = MetaQpointByReciprocalSuperCell.transpose() * ReciprocalSuperCell;
-          ReciprocalSuperCell = SuperCell.inverse().transpose();
-          ModifiedSuperCell = SuperCellDeformation * SuperCell;
-          SuperCell = SuperCellMultiplier.asDiagonal() * PrimativeCell;
-          整理可以得到:
-          SubQpointByReciprocalPrimativeCell = SuperCellMultiplier.asDiagonal().inverse() *
-            (XyzOfDiffOfSubQpointByReciprocalModifiedSuperCell +
-              SuperCellDeformation.inverse() * MetaQpointByReciprocalSuperCell);
-          但注意到, 这样得到的 SubQpoint 可能不在 ReciprocalPrimativeCell 中
-            (当 SuperCellDeformation 不是单位矩阵时, 边界附近的一两条 SubQpoint 会出现这种情况).
-          解决办法是, 在赋值时, 仅取 SubQpointByReciprocalPrimativeCell 的小数部分.
-        */
-        auto sub_qpoint_by_reciprocal_primative_cell =
-        (
-          input.SuperCellMultiplier.cast<double>().cwiseInverse().asDiagonal()
-          * (
-            diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>()
-              + input.SuperCellDeformation.inverse() * qpoint_data[i_of_meta_qpoint].Qpoint
-          )
-        ).eval();
-        _.Qpoint = sub_qpoint_by_reciprocal_primative_cell.array()
-          - sub_qpoint_by_reciprocal_primative_cell.array().floor();
-        _.Source = qpoint_data[i_of_meta_qpoint].Qpoint;
-        _.SourceIndex = i_of_meta_qpoint;
-
-        for (std::size_t i_of_mode = 0; i_of_mode < qpoint_data[i_of_meta_qpoint].ModeData.size(); i_of_mode++)
-        {
-          auto& __ = _.ModeData.emplace_back();
-          __.Frequency = qpoint_data[i_of_meta_qpoint].ModeData[i_of_mode].Frequency;
-          __.Weight = projection_coefficient[i_of_meta_qpoint][i_of_mode][i_of_sub_qpoint];
-          if (selected_atoms)
-            __.Weight *= projection_coefficient_on_atoms.value()[i_of_mode];
-        }
-      }
-    }
-    return output;
+    return projection_coefficient;
   };
 
   biu::Logger::Guard log;
-  log.info("Reading input file... ");
-  auto input = YAML::LoadFile(config_file).as<Input>();
-  auto qpoint_data = read_qpoint_data(input.QpointDataInputFile.value_or("band.hdf5"));
+
+  log.info("Reading input file...");
+  auto config = YAML::LoadFile(config_file).as<Config>();
+  CommonData output;
+  output.AtomMass = read_qpoint
+    (config.PrimativePhonopy, config.PrimativeQpoint, output.Primative);
+  output.AtomMass.merge(read_qpoint
+    (config.SuperPhonopy, config.SuperQpoint, output.Super));
+  output.Super.CellDeformation = config.SuperCellDeformation;
+  output.Super.CellMultiplier = config.SuperCellMultiplier;
   log.info("Done.");
 
-  std::clog << "Constructing basis... " << std::flush;
-
+  log.info("Constructing basis...");
   auto basis = construct_basis
   (
-    input.PrimativeCell, input.SuperCellMultiplier,
-    input.PrimativeCellBasisNumber,
-    input.AtomPositionBySuperCell
-      * (input.SuperCellDeformation * input.SuperCellMultiplier.cast<double>().asDiagonal() * input.PrimativeCell)
+    output.Primative.Cell, output.Super.CellMultiplier,
+    config.PrimativeCellBasisNumber,
+    output.Super.AtomPosition
+      * (output.Super.CellDeformation * output.Super.CellMultiplier.cast<double>().asDiagonal() * output.Primative.Cell)
   );
-  std::clog << "Done." << std::endl;
+  log.info("Done.");
 
   std::clog << "Calculating projection coefficient... " << std::flush;
-  // 用来在屏幕上输出进度的计数器和线程
-  std::atomic<std::size_t> number_of_finished_modes(0);
-  auto number_of_modes = ranges::accumulate
-  (
-    qpoint_data
-      | ranges::views::transform([](const auto& qpoint)
-        { return qpoint.ModeData.size(); }),
-    0ul
-  );
-  std::atomic<bool> finished;
-  std::thread print_thread([&]
+  // 将所有模式放到一维来处理
   {
-    while (true)
+    auto modes = output.Super.Qpoint
+      | ranges::views::transform([](const auto& qpoint)
+        { return qpoint.Mode | ranges::views::transform([](const auto& mode)
+          { return std::cref(mode.EigenVector); }); })
+      | ranges::views::join
+      | ranges::to_vector;
+    std::atomic<std::size_t> number_of_finished_modes(0);
+    std::thread print_thread([&]
     {
-      std::osyncstream(std::clog)
-        << "\rCalculating projection coefficient... ({}/{})"_f(number_of_finished_modes, number_of_modes)
-        << std::flush;
-      std::this_thread::sleep_for(100ms);
-      if (finished) break;
-    }
-  });
-  auto projection_coefficient = construct_projection_coefficient(basis, qpoint_data, number_of_finished_modes);
-  finished = true;
-  print_thread.join();
+      while (true)
+      {
+        std::osyncstream(std::clog)
+          << "\rCalculating projection coefficient... ({}/{})"_f(number_of_finished_modes, modes.size())
+          << std::flush;
+        std::this_thread::sleep_for(100ms);
+        if (number_of_finished_modes == modes.size()) break;
+      }
+    });
+    auto projection_coefficient = construct_projection_coefficient
+      (basis, modes, number_of_finished_modes);
+    std::size_t i_of_modes = 0;
+    for (auto& qpoint : output.Super.Qpoint) for (auto& mode : qpoint.Mode)
+      mode.WeightOnUnfold = projection_coefficient[i_of_modes++];
+    print_thread.join();
+  }
   std::clog << "\33[2K\rCalculating projection coefficient... Done." << std::endl;
 
-  std::clog << "Writing data... " << std::flush;
-  for (auto& output_file : input.QpointDataOutputFile)
-  {
-    auto output = construct_output
-      (input, projection_coefficient, qpoint_data, output_file.SelectedAtoms);
-    if (output_file.OutputAsYaml.value_or(false)) std::ofstream(output_file.Filename) << YAML::Node(output);
-    else std::ofstream(output_file.Filename, std::ios::binary) << biu::serialize<char>(output);
-  }
-  std::clog << "Done." << std::endl;
+  log.info("Writing data... ");
+  std::ofstream(config.OutputFile, std::ios::binary) << biu::serialize<char>(output);
+  log.info("Done.");
+
+  log.info("Summary:");
+
+  for (auto i_of_qpoint : std::views::iota(0u, output.Super.Qpoint.size()))
+    for (auto i_of_mode : std::views::iota(0u, output.Super.Qpoint[i_of_qpoint].Mode.size()))
+      for
+      (
+        auto i_of_sub_qpoint
+          : std::views::iota(0u, output.Super.Qpoint[i_of_qpoint].SubQpoint.size())
+      )
+      if (output.Super.Qpoint[i_of_qpoint].Mode[i_of_mode].WeightOnUnfold[i_of_sub_qpoint] > 0.01)
+        log.info("{}:{:.2f}:{}:{:.2f} -> {:.2f} {:.2f}"_f
+        (
+          i_of_qpoint, fmt::join(output.Super.Qpoint[i_of_qpoint].Qpoint, ", "),
+          i_of_mode, output.Super.Qpoint[i_of_qpoint].Mode[i_of_mode].Frequency,
+          fmt::join(output.Super.Qpoint[i_of_qpoint].SubQpoint[i_of_sub_qpoint], ", "),
+          output.Super.Qpoint[i_of_qpoint].Mode[i_of_mode].WeightOnUnfold[i_of_sub_qpoint]
+        ));
 }
