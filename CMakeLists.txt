@@ -32,5 +32,8 @@ message("List of compile features: ${CMAKE_CXX_COMPILE_FEATURES}")
 message("CMake build type: ${CMAKE_BUILD_TYPE}")
 
 include(CTest)
+
 add_test(NAME fold WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/fold COMMAND ufo fold config.yaml)
 add_test(NAME unfold WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/unfold COMMAND ufo unfold config.yaml)
+add_test(NAME zpp-to-yaml WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/zpp-to-yaml
+  COMMAND sh -c "${CMAKE_BINARY_DIR}/ufo zpp-to-yaml < data.zpp > data.yaml")
