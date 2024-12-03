@@ -29,7 +29,7 @@ void ufo::project_to_mode(std::string config_file)
     .SubQpoint = input.Super.Qpoint[config.SuperQpointIndex].SubQpoint[config.SubQpointIndex],
     .PrimativeQpoint = input.Primative.Qpoint[config.PrimativeQpointIndex].Qpoint,
     .Coefficient = std::vector<std::vector<double>>(input.Super.Qpoint[config.SuperQpointIndex].Mode.size(),
-      std::vector<double>(input.Primative.Qpoint[config.PrimativeQpointIndex].Mode.size(), 0))
+      std::vector<double>(input.Primative.Qpoint[config.PrimativeQpointIndex].Mode.size()))
   };
   if ((output.SubQpoint - output.PrimativeQpoint).norm() > 0.01)
     log.error("sub qpoint {} != primative qpoint {}"_f(output.SubQpoint, output.PrimativeQpoint));
@@ -99,7 +99,7 @@ void ufo::project_to_mode(std::string config_file)
       | ranges::views::transform([&](const auto& mode)
         {
           return primative_basis
-            | ranges::views::transform([&](const auto& basis) -> std::array<std::complex<double>, 3>
+            | ranges::views::transform([&](const auto& basis)
               { return (basis.transpose().conjugate() * mode.EigenVector).eval() | biu::fromEigen; })
             | ranges::to_vector
             | biu::toEigen<>;
@@ -121,9 +121,8 @@ void ufo::project_to_mode(std::string config_file)
   {
     for (auto [i_of_primative_mode, primative_mode]
       : ranges::views::enumerate(primative_projection_coefficient))
-      for (auto i_of_direction : std::array{0, 1, 2})
-        output.Coefficient[i_of_super_mode][i_of_primative_mode] +=
-          (super_mode.col(i_of_direction).transpose().conjugate() * primative_mode.col(i_of_direction)).norm();
+      output.Coefficient[i_of_super_mode][i_of_primative_mode] =
+        std::norm((super_mode.transpose().conjugate() * primative_mode).trace());
     auto sum = ranges::accumulate(output.Coefficient[i_of_super_mode], 0.);
     for (auto& coefficient : output.Coefficient[i_of_super_mode])
       coefficient *=
