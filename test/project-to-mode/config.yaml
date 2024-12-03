@@ -1,0 +1,6 @@
+PrimativeCellBasisNumber: [ 16, 16, 16 ]
+SuperQpointIndex: 0
+SubQpointIndex: 0
+PrimativeQpointIndex: 0
+InputDataFile: data.zpp
+OutputFile: output.yaml

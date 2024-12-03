@@ -7,9 +7,8 @@
 void ufo::unfold(std::string config_file)
 {
   // 反折叠的原理: 将超胞中的原子运动状态, 投影到一组平面波构成的基矢中.
-  // 每一个平面波的波矢由两部分相加得到: 一部分是单胞倒格子的整数倍, 所取的个数有一定任意性, 论文中建议取大约单胞中原子个数那么多个;
-  //  对于没有缺陷的情况, 取一个应该就足够了.
-  // 这些平面波以原胞为周期。
+  // 每一个平面波的波矢由两部分相加得到: 一部分是单胞倒格子的整数倍, 所取的个数有一定任意性, 论文中建议取大约单胞中原子个数那么多个，
+  // 但我觉得可以多取一些；这些平面波以原胞为周期，它用于尽可能描述
   // 另一部分是超胞倒格子的整数倍, 取 n 个, n 为超胞对应的单胞的倍数, 其实也就是倒空间中单胞对应倒格子中超胞的格点.
   // 只要第一部分取得足够多, 那么单胞中原子的状态就可以完全被这些平面波描述.
   // 将超胞中原子的运动状态投影到这些基矢上, 计算出投影的系数, 就可以将超胞的原子运动状态分解到单胞中的多个 q 点上.
@@ -143,16 +142,15 @@ void ufo::unfold(std::string config_file)
       for (auto [xyz_of_basis, i_of_basis]
         : biu::sequence(primative_cell_basis_number))
       {
-        // 计算 q 点的坐标, 单位为单胞的倒格矢
-        auto diff_of_sub_qpoint_by_reciprocal_primative_cell = xyz_of_basis.cast<double>()
+        // 计算波矢, 单位为单胞的倒格矢
+        auto wavevector_by_reciprocal_primative_cell = xyz_of_basis.cast<double>()
           + super_cell_multiplier.cast<double>().cwiseInverse().asDiagonal()
           * diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>();
         // 将单位转换为埃^-1
-        auto diff_of_sub_qpoint = (diff_of_sub_qpoint_by_reciprocal_primative_cell.transpose()
-          * (primative_cell.transpose().inverse())).transpose();
+        auto wavevector = primative_cell.inverse() * wavevector_by_reciprocal_primative_cell;
         // 计算基矢
         basis[i_of_sub_qpoint][i_of_basis]
-          = (2i * std::numbers::pi_v<double> * (atom_position * diff_of_sub_qpoint)).array().exp();
+          = (2i * std::numbers::pi_v<double> * (atom_position * wavevector)).array().exp();
       }
     }
     return basis;
@@ -204,6 +202,46 @@ void ufo::unfold(std::string config_file)
     (config.SuperPhonopy, config.SuperQpoint, output.Super));
   output.Super.CellDeformation = config.SuperCellDeformation;
   output.Super.CellMultiplier = config.SuperCellMultiplier;
+  // 填充 SubQpoint
+  for (auto i_of_super_qpoint : std::views::iota(0u, output.Super.Qpoint.size()))
+    for
+    (
+      auto [diff_of_sub_qpoint_by_reciprocal_modified_super_cell, i_of_sub_qpoint]
+        : biu::sequence(config.SuperCellMultiplier)
+    )
+    {
+      /*
+        SubQpointByReciprocalModifiedSuperCell = XyzOfDiffOfSubQpointByReciprocalModifiedSuperCell +
+          MetaQpointByReciprocalModifiedSuperCell;
+        SubQpoint = SubQpointByReciprocalModifiedSuperCell.transpose() * ReciprocalModifiedSuperCell;
+        SubQpoint = SubQpointByReciprocalPrimativeCell.transpose() * ReciprocalPrimativeCell;
+        ReciprocalModifiedSuperCell = ModifiedSuperCell.inverse().transpose();
+        ReciprocalPrimativeCell = PrimativeCell.inverse().transpose();
+        ModifiedSuperCell = SuperCellMultiplier.asDiagonal() * PrimativeCell;
+        MetaQpoint = MetaQpointByReciprocalModifiedSuperCell.transpose() * ReciprocalModifiedSuperCell;
+        MetaQpoint = MetaQpointByReciprocalSuperCell.transpose() * ReciprocalSuperCell;
+        ReciprocalSuperCell = SuperCell.inverse().transpose();
+        ModifiedSuperCell = SuperCellDeformation * SuperCell;
+        SuperCell = SuperCellMultiplier.asDiagonal() * PrimativeCell;
+        整理可以得到:
+        SubQpointByReciprocalPrimativeCell = SuperCellMultiplier.asDiagonal().inverse() *
+          (XyzOfDiffOfSubQpointByReciprocalModifiedSuperCell +
+            SuperCellDeformation.inverse() * MetaQpointByReciprocalSuperCell);
+        但注意到, 这样得到的 SubQpoint 可能不在 ReciprocalPrimativeCell 中
+          (当 SuperCellDeformation 不是单位矩阵时, 边界附近的一两条 SubQpoint 会出现这种情况).
+        解决办法是, 在赋值时, 仅取 SubQpointByReciprocalPrimativeCell 的小数部分.
+      */
+      auto sub_qpoint_by_reciprocal_primative_cell =
+      (
+        config.SuperCellMultiplier.cast<double>().cwiseInverse().asDiagonal()
+        * (
+          diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>()
+            + config.SuperCellDeformation.inverse() * output.Super.Qpoint[i_of_super_qpoint].Qpoint
+        )
+      ).eval();
+      output.Super.Qpoint[i_of_super_qpoint].SubQpoint.push_back(sub_qpoint_by_reciprocal_primative_cell.array()
+        - sub_qpoint_by_reciprocal_primative_cell.array().floor());
+    }
   log.info("Done.");
 
   log.info("Constructing basis...");

@@ -94,6 +94,7 @@ namespace ufo
   void fold(std::string config_file);
   void unfold(std::string config_file);
   void project_to_atom(std::string config_file);
+  void project_to_mode(std::string config_file);
   void plot_band(std::string config_file);
   void plot_point(std::string config_file);
   void raman_create_displacement(std::string config_file);

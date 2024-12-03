@@ -14,7 +14,8 @@ find_package(Matplot++ REQUIRED)
 find_package(biu REQUIRED)
 find_package(Threads REQUIRED)
 
-add_executable(ufo src/fold.cpp src/unfold.cpp src/plot.cpp src/raman.cpp src/project-to-atom.cpp src/main.cpp)
+add_executable(ufo src/fold.cpp src/unfold.cpp src/project-to-mode.cpp
+  src/plot.cpp src/raman.cpp src/project-to-atom.cpp src/main.cpp)
 target_include_directories(ufo PRIVATE ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(ufo PRIVATE TBB::tbb Matplot++::matplot biu::biu)
 target_compile_features(ufo PRIVATE cxx_std_23)
@@ -37,3 +38,5 @@ add_test(NAME fold WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/fold COMMAND ufo
 add_test(NAME unfold WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/unfold COMMAND ufo unfold config.yaml)
 add_test(NAME zpp-to-yaml WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/zpp-to-yaml
   COMMAND sh -c "${CMAKE_BINARY_DIR}/ufo zpp-to-yaml < data.zpp > data.yaml")
+add_test(NAME project-to-mode WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/project-to-mode
+  COMMAND ufo project-to-mode config.yaml)
