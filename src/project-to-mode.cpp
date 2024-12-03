@@ -38,25 +38,19 @@ void ufo::project_to_mode(std::string config_file)
   auto primative_basis = [&]
   {
     biu::Logger::Guard log;
-    std::vector<Eigen::VectorXcd> basis((config.PrimativeCellBasisNumber.array() * 2 - 1).prod());
+    std::vector<Eigen::VectorXcd> basis(config.PrimativeCellBasisNumber.array().prod());
     for (auto [xyz_of_basis, i_of_basis]
-      : biu::sequence
-      (
-        (-config.PrimativeCellBasisNumber.cast<int>().array() + 1).matrix().eval(),
-        config.PrimativeCellBasisNumber.cast<int>().eval()
-      ))
+      : biu::sequence(config.PrimativeCellBasisNumber.cast<int>().eval()))
     {
       // 波矢就是 xyz_of_basis, 单位为单胞的倒格矢
       // 将它的单位转换成埃^-1
-      Eigen::Vector3cd wavevector = input.Primative.Cell.inverse() * xyz_of_basis.cast<double>();
+      auto wavevector = input.Primative.Cell.inverse() * xyz_of_basis.cast<double>();
       log.debug("xyz_of_basis: {}"_f(xyz_of_basis));
       log.debug("wavevector: {:.3f}"_f(fmt::join(wavevector, ", ")));
       // 将原子坐标单位也转换为埃
-      Eigen::MatrixX3d atom_position = input.Primative.AtomPosition * input.Primative.Cell;
-      log.debug("first atom: {}"_f(atom_position.row(0)));
+      auto atom_position = input.Primative.AtomPosition * input.Primative.Cell;
       // 计算基矢
       basis[i_of_basis] = (2i * std::numbers::pi_v<double> * (atom_position * wavevector)).array().exp();
-      if (i_of_basis == 1) log.debug("basis: {}"_f(basis[i_of_basis]));
     }
     return basis;
   }();
@@ -64,7 +58,7 @@ void ufo::project_to_mode(std::string config_file)
   auto super_basis = [&]
   {
     biu::Logger::Guard log;
-    std::vector<Eigen::VectorXcd> basis((config.PrimativeCellBasisNumber.array() * 2 - 1).prod());
+    std::vector<Eigen::VectorXcd> basis(config.PrimativeCellBasisNumber.array().prod());
     auto diff_of_sub_qpoint_by_reciprocal_modified_super_cell = [&]
     {
       for
@@ -78,30 +72,24 @@ void ufo::project_to_mode(std::string config_file)
     log.debug("diff_of_sub_qpoint_by_reciprocal_modified_super_cell: {}"_f
       (diff_of_sub_qpoint_by_reciprocal_modified_super_cell));
     for (auto [xyz_of_basis, i_of_basis]
-      : biu::sequence
-      (
-        (-config.PrimativeCellBasisNumber.cast<int>().array() + 1).matrix().eval(),
-        config.PrimativeCellBasisNumber.cast<int>().eval()
-      ))
+      : biu::sequence(config.PrimativeCellBasisNumber.cast<int>().eval()))
     {
       // 计算波矢, 单位为单胞的倒格矢
-      Eigen::Vector3cd wavevector_by_reciprocal_primative_cell = xyz_of_basis.cast<double>()
+      auto wavevector_by_reciprocal_primative_cell = xyz_of_basis.cast<double>()
         + input.Super.CellMultiplier.cast<double>().cwiseInverse().asDiagonal()
         * diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>();
       // 将单位转换为埃^-1
-      Eigen::Vector3cd wavevector = input.Primative.Cell.inverse() * wavevector_by_reciprocal_primative_cell;
+      auto wavevector = input.Primative.Cell.inverse() * wavevector_by_reciprocal_primative_cell;
       log.debug("wavevector: {}"_f(wavevector));
       // 将原子坐标单位也转换为埃
       Eigen::MatrixX3d atom_position = input.Super.AtomPosition
         * (input.Super.CellDeformation * input.Super.CellMultiplier.cast<double>().asDiagonal() * input.Primative.Cell);
-      log.debug("first atom: {}"_f(atom_position.row(0)));
+      // 如果在制作模型的过程中，原子有移动过，需要减掉这个移动
+      if (input.Super.AtomTranslation)
+        atom_position -= (input.Super.AtomTranslation.value_or(std::array{0., 0., 0.}) | biu::toEigen<>)
+          .transpose().replicate(atom_position.rows(), 1);
       // 计算基矢
-      basis[i_of_basis] =
-      (
-        2i * std::numbers::pi_v<double> *
-        ((atom_position - (input.Super.AtomTranslation.value_or(std::array<double, 3>{0, 0, 0}) | biu::toEigen<>).transpose().replicate(atom_position.rows(), 1) ) * wavevector)
-      ).array().exp();
-      if (i_of_basis == 1) log.debug("basis: {}"_f(basis[i_of_basis]));
+      basis[i_of_basis] = (2i * std::numbers::pi_v<double> * (atom_position * wavevector)).array().exp();
     }
     return basis;
   }();
@@ -117,19 +105,6 @@ void ufo::project_to_mode(std::string config_file)
             | biu::toEigen<>;
         })
       | ranges::to_vector;
-  log.debug("primitive_projection_coefficient: {}"_f(nameof::nameof_full_type<decltype(primative_projection_coefficient)>()));
-  for (auto i_of_primative_mode : std::views::iota(0u, primative_projection_coefficient.size()))
-    for (auto i_of_direction : std::array{0, 1, 2})
-    {
-      if (i_of_primative_mode != 0 && i_of_primative_mode != 11) continue;
-      log.debug("primitive mode: {} {} {:.3f}"_f
-        (i_of_primative_mode, i_of_direction, fmt::join(primative_projection_coefficient[i_of_primative_mode].col(i_of_direction).array().abs(), ", ")));
-      log.debug("primitive mode: {} {} {:.3f}"_f
-        (i_of_primative_mode, i_of_direction, fmt::join(primative_projection_coefficient[i_of_primative_mode].col(i_of_direction).array().arg(), ", ")));
-    }
-  log.debug("primitive 0 {}"_f(primative_projection_coefficient[0].col(2).transpose().conjugate() * primative_projection_coefficient[0].col(2)));
-  log.debug("primitive 11 {}"_f(primative_projection_coefficient[11].col(2).transpose().conjugate() * primative_projection_coefficient[11].col(2)));
-  log.debug("0 x 11 {}"_f(primative_projection_coefficient[11].col(2).transpose().conjugate() * primative_projection_coefficient[0].col(2)));
   auto super_projection_coefficient =
     input.Super.Qpoint[config.SuperQpointIndex].Mode
       | ranges::views::transform([&](const auto& mode)
@@ -141,16 +116,6 @@ void ufo::project_to_mode(std::string config_file)
             | biu::toEigen<>;
         })
       | ranges::to_vector;
-  log.debug("super 2 x primitive 0 {}"_f(super_projection_coefficient[2].col(2).transpose().conjugate() * primative_projection_coefficient[0].col(2)));
-  log.debug("super 2 x primitive 11 {}"_f(super_projection_coefficient[2].col(2).transpose().conjugate() * primative_projection_coefficient[11].col(2)));
-  log.debug("super 2 x super 2 {}"_f(super_projection_coefficient[2].col(2).transpose().conjugate() * super_projection_coefficient[2].col(2)));
-  for (auto i_of_direction : std::array{0, 1, 2})
-  {
-    log.debug("super mode: 2 {} {:.3f}"_f
-      (i_of_direction, fmt::join(super_projection_coefficient[2].col(i_of_direction).array().abs(), ", ")));
-    log.debug("super mode: 2 {} {:.3f}"_f
-      (i_of_direction, fmt::join(super_projection_coefficient[2].col(i_of_direction).array().arg(), ", ")));
-  }
   // 将它们互相投影，得到结果
   for (auto [i_of_super_mode, super_mode] : ranges::views::enumerate(super_projection_coefficient))
   {
