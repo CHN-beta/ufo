@@ -28,6 +28,7 @@ void ufo::unfold(std::string config_file)
     //  = ReciprocalPositionToPrimativeCell(line vector) * ReciprocalPrimativeCell
     Eigen::Vector3i SuperCellMultiplier;
     Eigen::Matrix3d SuperCellDeformation;
+    std::optional<std::array<double, 3>> AtomTranslation;
 
     // 在单胞内取几个平面波的基矢
     Eigen::Vector<std::size_t, 3> PrimativeCellBasisNumber;
@@ -202,6 +203,7 @@ void ufo::unfold(std::string config_file)
     (config.SuperPhonopy, config.SuperQpoint, output.Super));
   output.Super.CellDeformation = config.SuperCellDeformation;
   output.Super.CellMultiplier = config.SuperCellMultiplier;
+  output.Super.AtomTranslation = config.AtomTranslation;
   // 填充 SubQpoint
   for (auto i_of_super_qpoint : std::views::iota(0u, output.Super.Qpoint.size()))
     for

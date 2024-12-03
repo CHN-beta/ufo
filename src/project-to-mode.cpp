@@ -29,7 +29,7 @@ void ufo::project_to_mode(std::string config_file)
     .SubQpoint = input.Super.Qpoint[config.SuperQpointIndex].SubQpoint[config.SubQpointIndex],
     .PrimativeQpoint = input.Primative.Qpoint[config.PrimativeQpointIndex].Qpoint,
     .Coefficient = std::vector<std::vector<double>>(input.Super.Qpoint[config.SuperQpointIndex].Mode.size(),
-      std::vector<double>(input.Primative.Qpoint[config.PrimativeQpointIndex].Mode.size()))
+      std::vector<double>(input.Primative.Qpoint[config.PrimativeQpointIndex].Mode.size(), 0))
   };
   if ((output.SubQpoint - output.PrimativeQpoint).norm() > 0.01)
     log.error("sub qpoint {} != primative qpoint {}"_f(output.SubQpoint, output.PrimativeQpoint));
@@ -38,19 +38,25 @@ void ufo::project_to_mode(std::string config_file)
   auto primative_basis = [&]
   {
     biu::Logger::Guard log;
-    std::vector<Eigen::VectorXcd> basis(config.PrimativeCellBasisNumber.prod());
+    std::vector<Eigen::VectorXcd> basis((config.PrimativeCellBasisNumber.array() * 2 - 1).prod());
     for (auto [xyz_of_basis, i_of_basis]
-      : biu::sequence(config.PrimativeCellBasisNumber))
+      : biu::sequence
+      (
+        (-config.PrimativeCellBasisNumber.cast<int>().array() + 1).matrix().eval(),
+        config.PrimativeCellBasisNumber.cast<int>().eval()
+      ))
     {
       // 波矢就是 xyz_of_basis, 单位为单胞的倒格矢
       // 将它的单位转换成埃^-1
-      auto wavevector = input.Primative.Cell.inverse() * xyz_of_basis.cast<double>();
+      Eigen::Vector3cd wavevector = input.Primative.Cell.inverse() * xyz_of_basis.cast<double>();
       log.debug("xyz_of_basis: {}"_f(xyz_of_basis));
       log.debug("wavevector: {:.3f}"_f(fmt::join(wavevector, ", ")));
       // 将原子坐标单位也转换为埃
-      auto atom_position = input.Primative.AtomPosition * input.Primative.Cell;
+      Eigen::MatrixX3d atom_position = input.Primative.AtomPosition * input.Primative.Cell;
+      log.debug("first atom: {}"_f(atom_position.row(0)));
       // 计算基矢
       basis[i_of_basis] = (2i * std::numbers::pi_v<double> * (atom_position * wavevector)).array().exp();
+      if (i_of_basis == 1) log.debug("basis: {}"_f(basis[i_of_basis]));
     }
     return basis;
   }();
@@ -58,7 +64,7 @@ void ufo::project_to_mode(std::string config_file)
   auto super_basis = [&]
   {
     biu::Logger::Guard log;
-    std::vector<Eigen::VectorXcd> basis(config.PrimativeCellBasisNumber.prod());
+    std::vector<Eigen::VectorXcd> basis((config.PrimativeCellBasisNumber.array() * 2 - 1).prod());
     auto diff_of_sub_qpoint_by_reciprocal_modified_super_cell = [&]
     {
       for
@@ -72,19 +78,30 @@ void ufo::project_to_mode(std::string config_file)
     log.debug("diff_of_sub_qpoint_by_reciprocal_modified_super_cell: {}"_f
       (diff_of_sub_qpoint_by_reciprocal_modified_super_cell));
     for (auto [xyz_of_basis, i_of_basis]
-      : biu::sequence(config.PrimativeCellBasisNumber))
+      : biu::sequence
+      (
+        (-config.PrimativeCellBasisNumber.cast<int>().array() + 1).matrix().eval(),
+        config.PrimativeCellBasisNumber.cast<int>().eval()
+      ))
     {
       // 计算波矢, 单位为单胞的倒格矢
-      auto wavevector_by_reciprocal_primative_cell = xyz_of_basis.cast<double>()
+      Eigen::Vector3cd wavevector_by_reciprocal_primative_cell = xyz_of_basis.cast<double>()
         + input.Super.CellMultiplier.cast<double>().cwiseInverse().asDiagonal()
         * diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>();
       // 将单位转换为埃^-1
-      auto wavevector = input.Primative.Cell.inverse() * wavevector_by_reciprocal_primative_cell;
+      Eigen::Vector3cd wavevector = input.Primative.Cell.inverse() * wavevector_by_reciprocal_primative_cell;
+      log.debug("wavevector: {}"_f(wavevector));
       // 将原子坐标单位也转换为埃
-      auto atom_position = input.Super.AtomPosition
+      Eigen::MatrixX3d atom_position = input.Super.AtomPosition
         * (input.Super.CellDeformation * input.Super.CellMultiplier.cast<double>().asDiagonal() * input.Primative.Cell);
+      log.debug("first atom: {}"_f(atom_position.row(0)));
       // 计算基矢
-      basis[i_of_basis] = (2i * std::numbers::pi_v<double> * (atom_position * wavevector)).array().exp();
+      basis[i_of_basis] =
+      (
+        2i * std::numbers::pi_v<double> *
+        ((atom_position - (input.Super.AtomTranslation.value_or(std::array<double, 3>{0, 0, 0}) | biu::toEigen<>).transpose().replicate(atom_position.rows(), 1) ) * wavevector)
+      ).array().exp();
+      if (i_of_basis == 1) log.debug("basis: {}"_f(basis[i_of_basis]));
     }
     return basis;
   }();
@@ -94,12 +111,13 @@ void ufo::project_to_mode(std::string config_file)
       | ranges::views::transform([&](const auto& mode)
         {
           return primative_basis
-            | ranges::views::transform([&](const auto& basis)
+            | ranges::views::transform([&](const auto& basis) -> std::array<std::complex<double>, 3>
               { return (basis.transpose().conjugate() * mode.EigenVector).eval() | biu::fromEigen; })
             | ranges::to_vector
             | biu::toEigen<>;
         })
       | ranges::to_vector;
+  log.debug("primitive_projection_coefficient: {}"_f(nameof::nameof_full_type<decltype(primative_projection_coefficient)>()));
   for (auto i_of_primative_mode : std::views::iota(0u, primative_projection_coefficient.size()))
     for (auto i_of_direction : std::array{0, 1, 2})
     {

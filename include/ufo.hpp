@@ -59,6 +59,7 @@ namespace ufo
       Eigen::Matrix3d CellDeformation;
       std::vector<std::pair<std::string, std::size_t>> AtomType;
       Eigen::MatrixX3d AtomPosition;
+      std::optional<std::array<double, 3>> AtomTranslation;
       struct QpointType
       {
         Eigen::Vector3d Qpoint;
@@ -77,7 +78,7 @@ namespace ufo
         using serialize = zpp::bits::members<3>;
       };
       std::vector<QpointType> Qpoint;
-      using serialize = zpp::bits::members<6>;
+      using serialize = zpp::bits::members<7>;
     } Super;
 
     // 选择的原子
