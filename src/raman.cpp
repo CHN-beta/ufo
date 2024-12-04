@@ -24,7 +24,7 @@ namespace ufo
     {
       // 要计算的是原胞还是超胞
       decltype(RamanData::Cell) Cell;
-      // 要计算的模式，总是假定是 gamma 点的模式
+      // 要计算哪个 q 点的哪些模式，总是假定是 gamma 点的模式
       std::map<std::size_t, std::set<std::size_t>> SelectedModes;
       // 原子最大位移大小，单位为埃
       double MaxDisplacement;
@@ -109,7 +109,7 @@ namespace ufo
     else process(input.Super);
 
     std::filesystem::create_directories("{}/{}"_f(config.OutputPoscarDirectory, "origin"));
-    std::ofstream("{}/origin/POSCAR"_f(config.OutputDataFile)) << generate_poscar
+    std::ofstream("{}/origin/POSCAR"_f(config.OutputPoscarDirectory)) << generate_poscar
       (input.Super.Cell, input.Super.AtomPosition, input.Super.AtomType);
     std::ofstream(config.OutputDataFile, std::ios::binary) << biu::serialize<char>(output);
   }
@@ -160,7 +160,7 @@ R"(- - [ {}, {}, {} ]
     struct Config
     {
       Eigen::Matrix3d OriginalSusceptibility;
-      std::vector<Eigen::Matrix3d> Susceptibilities;
+      std::vector<Eigen::Matrix3d> Susceptibility;
       std::array<Eigen::Vector3d, 2> Polarization;
       std::string InputDataFile;
       std::string RamanInputDataFile;
@@ -180,7 +180,7 @@ R"(- - [ {}, {}, {} ]
       for (auto&& [i_of_mode, mode] : ranges::views::enumerate(raman_input.Mode))
       {
         auto&& _ = cell.Qpoint[mode.QpointIndex].Mode[mode.ModeIndex];
-        Eigen::Matrix3d raman_tensor = (config.Susceptibilities[i_of_mode] - config.OriginalSusceptibility)
+        Eigen::Matrix3d raman_tensor = (config.Susceptibility[i_of_mode] - config.OriginalSusceptibility)
           / mode.Ratio / raman_input.MaxDisplacement;
         _.RamanTensor = raman_tensor | biu::fromEigen;
         _.WeightOnRaman = config.Polarization[0].transpose() * raman_tensor * config.Polarization[1];

@@ -1,0 +1,7 @@
+Cell: Super
+SelectedModes: 
+  0: [ 0, 1, 2, 5, 6, 9, 10, 15, 16, 107, 115, 185, 251, 252, 281, 282, 287, 292, 293, 311, 312, 327, 378, 379 ]
+MaxDisplacement: 0.02
+OutputPoscarDirectory: POSCAR
+InputDataFile: data.zpp
+OutputDataFile: output.zpp

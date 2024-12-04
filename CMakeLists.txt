@@ -40,3 +40,13 @@ add_test(NAME zpp-to-yaml WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/zpp-to-ya
   COMMAND sh -c "${CMAKE_BINARY_DIR}/ufo zpp-to-yaml < data.zpp > data.yaml")
 add_test(NAME project-to-mode WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/project-to-mode
   COMMAND ufo project-to-mode config.yaml)
+add_test(NAME raman-create-displacement WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/raman-create-displacement
+  COMMAND ufo raman-create-displacement config.yaml)
+set(OUTCAR_FILES)
+foreach(i RANGE 0 23)
+    list(APPEND OUTCAR_FILES job/${i}/OUTCAR)
+endforeach()
+add_test(NAME raman-extract WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/raman-extract
+  COMMAND ufo raman-extract ${OUTCAR_FILES} job/origin/OUTCAR)
+add_test(NAME raman-apply-contribution WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/raman-apply-contribution
+  COMMAND ufo raman-apply-contribution config.yaml)
