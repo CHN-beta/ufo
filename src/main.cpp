@@ -10,13 +10,7 @@ int main(int argc, const char** argv)
   else if (argv[1] == "project-to-atom"s) ufo::project_to_atom(argv[2]);
   else if (argv[1] == "project-to-mode"s) ufo::project_to_mode(argv[2]);
   else if (argv[1] == "raman-create-displacement"s) ufo::raman_create_displacement(argv[2]);
-  else if (argv[1] == "raman-extract"s) ufo::raman_extract
-  (
-    std::vector<const char*>(argv + 2, argv + argc)
-      | biu::toLvalue
-      | ranges::views::transform([](const char* arg) { return std::string(arg); })
-      | ranges::to_vector
-  );
+  else if (argv[1] == "raman-extract"s) ufo::raman_extract(argv[2]);
   else if (argv[1] == "raman-apply-contribution"s) ufo::raman_apply_contribution(argv[2]);
   else if (argv[1] == "plot-band"s) ufo::plot_band(argv[2]);
   else if (argv[1] == "plot-point"s) ufo::plot_point(argv[2]);

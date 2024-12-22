@@ -1,18 +1,10 @@
-
 # include <ufo.hpp>
 
 namespace ufo
 {
   struct RamanData
   {
-    struct ModeType
-    {
-      std::size_t QpointIndex;
-      std::size_t ModeIndex;
-      double Ratio;
-      using serialize = zpp::bits::members<3>;
-    };
-    std::vector<ModeType> Mode;
+    std::map<std::pair<std::size_t, std::size_t>, double> ModeRatio;
     double MaxDisplacement;
     enum { Primative, Super } Cell;
     using serialize = zpp::bits::members<3>;
@@ -77,7 +69,6 @@ namespace ufo
 
     auto process = [&](auto& cell)
     {
-      std::size_t i_of_poscar = 0;
       auto mass = cell.AtomType
         | ranges::views::transform([&](auto&& atom)
           { return ranges::views::repeat_n(input.AtomMass[atom.first], atom.second); })
@@ -92,7 +83,7 @@ namespace ufo
           auto ratio = config.MaxDisplacement / atom_movement.rowwise().norm().maxCoeff();
           atom_movement *= ratio;
           // 输出
-          auto path = "{}/{}"_f(config.OutputPoscarDirectory, i_of_poscar);
+          auto path = "{}/{}/{}"_f(config.OutputPoscarDirectory, i_of_qpoint, i_of_mode);
           std::filesystem::create_directories(path);
           std::ofstream("{}/POSCAR"_f(path)) << generate_poscar
           (
@@ -100,9 +91,8 @@ namespace ufo
             cell.AtomPosition + atom_movement * cell.Cell.inverse(),
             cell.AtomType
           );
-          output.Mode.push_back({i_of_qpoint, i_of_mode, ratio});
+          output.ModeRatio[{i_of_qpoint, i_of_mode}] = ratio;
           log.debug("Write mode {} {} {}"_f(i_of_qpoint, i_of_mode, atom_movement.rowwise().norm().eval()));
-          i_of_poscar++;
         }
     };
     if (config.Cell == RamanData::Primative) process(input.Primative);
@@ -114,13 +104,12 @@ namespace ufo
     std::ofstream(config.OutputDataFile, std::ios::binary) << biu::serialize<char>(output);
   }
 
-  void raman_extract(std::vector<std::string> files)
+  void raman_extract(std::string path)
   {
-    biu::Logger::Guard log(files);
-    std::vector<Eigen::Matrix3d> electricity_tensors;
-
-    for (const auto& file : files)
+    biu::Logger::Guard log(path);
+    auto get_dielectric_tensor = [](std::filesystem::path file)
     {
+      biu::Logger::Guard log(file);
       auto in_stream = std::ifstream(file);
       std::string line;
       // search line containing: MACROSCOPIC STATIC DIELECTRIC TENSOR
@@ -131,28 +120,31 @@ namespace ufo
           log.debug("find in {}"_f(file));
           // skip 1 line
           std::getline(in_stream, line);
-          electricity_tensors.emplace_back();
+          Eigen::Matrix3d dielectric_tensor;
           for (std::size_t i = 0; i < 3; i++) for (std::size_t j = 0; j < 3; j++)
-            in_stream >> electricity_tensors.back()(i, j);
-          log.debug("read tensor {}"_f(electricity_tensors.back()));
-          break;
+            in_stream >> dielectric_tensor(i, j);
+          log.debug("read tensor {}"_f(dielectric_tensor));
+          return dielectric_tensor;
         }
       }
       // test if the file is read correctly
-      if (!in_stream) throw std::runtime_error("Error reading file: {}"_f(file));
-    }
-
-    // output the result
-    for (auto e: electricity_tensors) std::cout <<
-R"(- - [ {}, {}, {} ]
-  - [ {}, {}, {} ]
-  - [ {}, {}, {} ]
-)"_f
-      (
-        e(0, 0), e(0, 1), e(0, 2),
-        e(1, 0), e(1, 1), e(1, 2),
-        e(2, 0), e(2, 1), e(2, 2)
-      );
+      throw std::runtime_error("Error reading file: {}"_f(file));
+    };
+    auto search_path = [&](this auto self, std::size_t indent, std::string path) -> void
+    {
+      if (std::filesystem::exists(path + "/OUTCAR"))
+      {
+        auto e = get_dielectric_tensor(path + "/OUTCAR");
+        for (std::size_t i = 0; i < 3; i++) std::cout << "{}- [ {}, {}, {} ]\n"_f
+          (std::string(indent * 2, ' '), e(i, 0), e(i, 1), e(i, 2));
+      }
+      else for (auto entry : std::filesystem::directory_iterator(path)) if (entry.is_directory())
+      {
+        std::cout << "{}{}:\n"_f(std::string(indent * 2, ' '), entry.path().filename());
+        self(indent + 1, entry.path());
+      }
+    };
+    search_path(0, path);
   }
 
   void raman_apply_contribution(std::string config_file)
@@ -160,7 +152,7 @@ R"(- - [ {}, {}, {} ]
     struct Config
     {
       Eigen::Matrix3d OriginalSusceptibility;
-      std::vector<Eigen::Matrix3d> Susceptibility;
+      std::map<std::size_t, std::map<std::size_t, Eigen::Matrix3d>> Susceptibility;
       std::array<Eigen::Vector3d, 2> Polarization;
       std::string InputDataFile;
       std::string RamanInputDataFile;
@@ -177,17 +169,18 @@ R"(- - [ {}, {}, {} ]
     input.RamanPolarization = config.Polarization;
     auto process = [&](auto& cell)
     {
-      for (auto&& [i_of_mode, mode] : ranges::views::enumerate(raman_input.Mode))
+      for (auto&& [i, ratio] : raman_input.ModeRatio)
       {
-        auto&& _ = cell.Qpoint[mode.QpointIndex].Mode[mode.ModeIndex];
-        Eigen::Matrix3d raman_tensor = (config.Susceptibility[i_of_mode] - config.OriginalSusceptibility)
-          / mode.Ratio / raman_input.MaxDisplacement;
+        auto&& [i_of_qpoint, i_of_mode] = i;
+        auto&& _ = cell.Qpoint[i_of_qpoint].Mode[i_of_mode];
+        Eigen::Matrix3d raman_tensor = (config.Susceptibility[i_of_qpoint][i_of_mode] - config.OriginalSusceptibility)
+          / ratio / raman_input.MaxDisplacement;
         _.RamanTensor = raman_tensor | biu::fromEigen;
         _.WeightOnRaman = config.Polarization[0].transpose() * raman_tensor * config.Polarization[1];
         log.info("{}:{:.2f}:{}:{:.2f} {}"_f
         (
-          mode.QpointIndex, fmt::join(cell.Qpoint[mode.QpointIndex].Qpoint, ", "),
-          mode.ModeIndex, _.Frequency, *_.WeightOnRaman
+          i_of_qpoint, fmt::join(cell.Qpoint[i_of_qpoint].Qpoint, ", "),
+          i_of_mode, _.Frequency, *_.WeightOnRaman
         ));
       }
     };

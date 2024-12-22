@@ -99,6 +99,6 @@ namespace ufo
   void plot_band(std::string config_file);
   void plot_point(std::string config_file);
   void raman_create_displacement(std::string config_file);
-  void raman_extract(std::vector<std::string> files);
+  void raman_extract(std::string path);
   void raman_apply_contribution(std::string config_file);
 }

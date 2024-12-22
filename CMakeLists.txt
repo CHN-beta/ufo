@@ -13,6 +13,7 @@ find_package(TBB REQUIRED)
 find_package(Matplot++ REQUIRED)
 find_package(biu REQUIRED)
 find_package(Threads REQUIRED)
+message("biu dir: ${biu_DIR}")
 
 add_executable(ufo src/fold.cpp src/unfold.cpp src/project-to-mode.cpp
   src/plot.cpp src/raman.cpp src/project-to-atom.cpp src/main.cpp)
@@ -42,11 +43,7 @@ add_test(NAME project-to-mode WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/proje
   COMMAND ufo project-to-mode config.yaml)
 add_test(NAME raman-create-displacement WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/raman-create-displacement
   COMMAND ufo raman-create-displacement config.yaml)
-set(OUTCAR_FILES)
-foreach(i RANGE 0 23)
-    list(APPEND OUTCAR_FILES job/${i}/OUTCAR)
-endforeach()
 add_test(NAME raman-extract WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/raman-extract
-  COMMAND ufo raman-extract ${OUTCAR_FILES} job/origin/OUTCAR)
+  COMMAND ufo raman-extract .)
 add_test(NAME raman-apply-contribution WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/raman-apply-contribution
   COMMAND ufo raman-apply-contribution config.yaml)
