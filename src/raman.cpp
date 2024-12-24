@@ -83,14 +83,14 @@ namespace ufo
           auto ratio = config.MaxDisplacement / atom_movement.rowwise().norm().maxCoeff();
           atom_movement *= ratio;
           // 输出
-          auto path = "{}/{}/{}"_f(config.OutputPoscarDirectory, i_of_qpoint, i_of_mode);
-          std::filesystem::create_directories(path);
-          std::ofstream("{}/POSCAR"_f(path)) << generate_poscar
-          (
-            cell.Cell,
-            cell.AtomPosition + atom_movement * cell.Cell.inverse(),
-            cell.AtomType
-          );
+          for (auto direction : {1, -1})
+          {
+            auto path = "{}/{}/{}/{}"_f
+              (config.OutputPoscarDirectory, i_of_qpoint, i_of_mode, direction > 0 ? "+" : "-");
+            std::filesystem::create_directories(path);
+            std::ofstream("{}/POSCAR"_f(path)) << generate_poscar
+              (cell.Cell, cell.AtomPosition + atom_movement * cell.Cell.inverse() * direction, cell.AtomType);
+          }
           output.ModeRatio[{i_of_qpoint, i_of_mode}] = ratio;
           log.debug("Write mode {} {} {}"_f(i_of_qpoint, i_of_mode, atom_movement.rowwise().norm().eval()));
         }
@@ -140,7 +140,12 @@ namespace ufo
       }
       else for (auto entry : std::filesystem::directory_iterator(path)) if (entry.is_directory())
       {
-        std::cout << "{}{}:\n"_f(std::string(indent * 2, ' '), entry.path().filename());
+        std::cout << "{}{}:\n"_f
+        (
+          std::string(indent * 2, ' '),
+          (std::set{"+"s, "-"s}.contains(entry.path().filename()))
+            ? "\"{}\""_f(entry.path().filename()) : entry.path().filename().string()
+        );
         self(indent + 1, entry.path());
       }
     };
@@ -152,7 +157,7 @@ namespace ufo
     struct Config
     {
       Eigen::Matrix3d OriginalSusceptibility;
-      std::map<std::size_t, std::map<std::size_t, Eigen::Matrix3d>> Susceptibility;
+      std::map<std::size_t, std::map<std::size_t, std::map<std::string, Eigen::Matrix3d>>> Susceptibility;
       std::array<Eigen::Vector3d, 2> Polarization;
       std::string InputDataFile;
       std::string RamanInputDataFile;
@@ -173,7 +178,8 @@ namespace ufo
       {
         auto&& [i_of_qpoint, i_of_mode] = i;
         auto&& _ = cell.Qpoint[i_of_qpoint].Mode[i_of_mode];
-        Eigen::Matrix3d raman_tensor = (config.Susceptibility[i_of_qpoint][i_of_mode] - config.OriginalSusceptibility)
+        auto&& susceptibility = config.Susceptibility[i_of_qpoint][i_of_mode];
+        Eigen::Matrix3d raman_tensor = (susceptibility["+"] - susceptibility["-"]) / 2
           / ratio / raman_input.MaxDisplacement;
         _.RamanTensor = raman_tensor | biu::fromEigen;
         _.WeightOnRaman = config.Polarization[0].transpose() * raman_tensor * config.Polarization[1];
