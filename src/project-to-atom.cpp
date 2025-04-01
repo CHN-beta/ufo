@@ -15,13 +15,12 @@ void ufo::project_to_atom(std::string config_file)
   auto input = biu::deserialize<CommonData>(biu::read<std::byte>(config.InputFile));
   input.SelectedAtom = config.SelectedAtom;
   for (auto& qpoint : input.Super.Qpoint) for (auto& mode : qpoint.Mode)
-    mode.WeightOnSelectedAtom = mode.EigenVector.rowwise().norm().cwiseProduct
+    mode.WeightOnSelectedAtom = mode.EigenVector.rowwise().squaredNorm().cwiseProduct
     (
       ranges::views::iota(0ul, input.Super.AtomPosition.rows() * 1ul)
         | ranges::views::transform([&](auto i)
           { return config.SelectedAtom.contains(i) ? 1. : 0.; })
-        | ranges::to_vector
-        | biu::toEigen<>
+        | ranges::to_vector | biu::toEigen<>
     ).sum() * (input.Super.AtomPosition.rows() * 1. / config.SelectedAtom.size());
   std::ofstream(config.OutputFile, std::ios::binary) << biu::serialize<char>(input);
   log.info("Summary:");
