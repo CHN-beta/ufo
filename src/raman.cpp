@@ -77,16 +77,11 @@ namespace ufo
         for (auto i_of_mode : config.SelectedModes[i_of_qpoint])
         {
           // 假定虚部总是为零
-          // 来自 phonopy 的 eigenvector 已经是指原子移动（单位为埃），不应该再用质量去调整
-          auto move_eigenvector = cell.Qpoint[i_of_qpoint].Mode[i_of_mode].EigenVector.real().eval();
-          auto atom_movement =
-            (move_eigenvector / move_eigenvector.rowwise().norm().maxCoeff() * config.MaxDisplacement).eval();
-          // 然而，为了让不同模式的拉曼张量有可比性，需要按照力矩阵的eigenvector来归一化（使得每个声子的能量一致），而不是运动幅度一致
-          auto energy_eigenvector = move_eigenvector.cwiseProduct(mass.cwiseSqrt().rowwise().replicate(3)).eval();
-          // 这个 ratio 指：一个声子（能量为 h nu），需要乘以多少，才会使得最大原子位移为 config.MaxDisplacement
-          // 用来之后读取计算结果后，放缩拉曼张量
-          double ratio = energy_eigenvector.norm() / move_eigenvector.rowwise().norm().maxCoeff()
-            * config.MaxDisplacement;
+          auto atom_movement = cell.Qpoint[i_of_qpoint].Mode[i_of_mode].EigenVector.real()
+            .cwiseProduct(mass.cwiseSqrt().cwiseInverse().rowwise().replicate(3)).eval();
+          // 归一化
+          auto ratio = config.MaxDisplacement / atom_movement.rowwise().norm().maxCoeff();
+          atom_movement *= ratio;
           // 输出
           for (auto direction : {1, -1})
           {
@@ -184,7 +179,8 @@ namespace ufo
         auto&& [i_of_qpoint, i_of_mode] = i;
         auto&& _ = cell.Qpoint[i_of_qpoint].Mode[i_of_mode];
         auto&& susceptibility = config.Susceptibility[i_of_qpoint][i_of_mode];
-        Eigen::Matrix3d raman_tensor = (susceptibility["+"] - susceptibility["-"]) / 2 / ratio;
+        Eigen::Matrix3d raman_tensor = (susceptibility["+"] - susceptibility["-"]) / 2
+          / ratio / raman_input.MaxDisplacement;
         _.RamanTensor = raman_tensor | biu::fromEigen;
         _.WeightOnRaman = config.Polarization[0].transpose() * raman_tensor * config.Polarization[1];
         log.info("{}:{:.2f}:{}:{:.2f} {}"_f
