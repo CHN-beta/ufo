@@ -77,11 +77,11 @@ namespace ufo
         for (auto i_of_mode : config.SelectedModes[i_of_qpoint])
         {
           // 假定虚部总是为零
-          auto atom_movement = cell.Qpoint[i_of_qpoint].Mode[i_of_mode].EigenVector.real()
+          auto move_eigenvector = cell.Qpoint[i_of_qpoint].Mode[i_of_mode].EigenVector.real()
             .cwiseProduct(mass.cwiseSqrt().cwiseInverse().rowwise().replicate(3)).eval();
           // 归一化
-          auto ratio = config.MaxDisplacement / atom_movement.rowwise().norm().maxCoeff();
-          atom_movement *= ratio;
+          auto ratio = config.MaxDisplacement / move_eigenvector.rowwise().norm().maxCoeff();
+          auto atom_movement = (move_eigenvector * ratio).eval();
           // 输出
           for (auto direction : {1, -1})
           {
