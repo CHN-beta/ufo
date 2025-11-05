@@ -179,8 +179,7 @@ namespace ufo
         auto&& [i_of_qpoint, i_of_mode] = i;
         auto&& _ = cell.Qpoint[i_of_qpoint].Mode[i_of_mode];
         auto&& susceptibility = config.Susceptibility[i_of_qpoint][i_of_mode];
-        Eigen::Matrix3d raman_tensor = (susceptibility["+"] - susceptibility["-"]) / 2
-          / ratio / raman_input.MaxDisplacement;
+        Eigen::Matrix3d raman_tensor = (susceptibility["+"] - susceptibility["-"]) / 2 / ratio;
         _.RamanTensor = raman_tensor | biu::fromEigen;
         _.WeightOnRaman = config.Polarization[0].transpose() * raman_tensor * config.Polarization[1];
         log.info("{}:{:.2f}:{}:{:.2f} {}"_f
