@@ -69,10 +69,6 @@ namespace ufo
 
     auto process = [&](auto& cell)
     {
-      // 我们需要做两件事。
-      // 第一件事，是将原子振动幅度进行缩放，使得最大位移为指定值。这是为了保证计算时用到的位移幅度不是太大也不是太小，有个令人满意的精确度。
-      // 第二件事是，计算这个振幅下对应的粒子数（声子数），并将它的倒数存储为 ratio，
-      //   这样在后续计算 Raman 张量时就可以直接用这个 ratio 来除以位移幅度，从而得到正确的 Raman 张量。
       auto mass = cell.AtomType
         | ranges::views::transform([&](auto&& atom)
           { return ranges::views::repeat_n(input.AtomMass[atom.first], atom.second); })
@@ -80,15 +76,12 @@ namespace ufo
       for (auto i_of_qpoint : config.SelectedModes | ranges::views::keys)
         for (auto i_of_mode : config.SelectedModes[i_of_qpoint])
         {
-          // 假定虚部总是为零，将特征向量的实部取出，除以 sqrt(mass) 得到位移，这时位移还没有经过放缩
-          auto movement_before_scale = cell.Qpoint[i_of_qpoint].Mode[i_of_mode].EigenVector.real()
+          // 假定虚部总是为零
+          auto move_eigenvector = cell.Qpoint[i_of_qpoint].Mode[i_of_mode].EigenVector.real()
             .cwiseProduct(mass.cwiseSqrt().cwiseInverse().rowwise().replicate(3)).eval();
-          // 对位移进行放缩
-          auto movement_scale_ratio = config.MaxDisplacement / movement_before_scale.rowwise().norm().maxCoeff();
-          auto movement_after_scale = (movement_before_scale * movement_scale_ratio).eval();
-          // 计算这个位移下的粒子数，只需要是一个比例关系即可
-          auto phonon_number = movement_after_scale.rowwise().squaredNorm().cwiseProduct(mass).sum()
-            * cell.Qpoint[i_of_qpoint].Mode[i_of_mode].Frequency;
+          // 归一化
+          auto ratio = config.MaxDisplacement / move_eigenvector.rowwise().norm().maxCoeff();
+          auto atom_movement = (move_eigenvector * ratio).eval();
           // 输出
           for (auto direction : {1, -1})
           {
@@ -96,11 +89,10 @@ namespace ufo
               (config.OutputPoscarDirectory, i_of_qpoint, i_of_mode, direction > 0 ? "+" : "-");
             std::filesystem::create_directories(path);
             std::ofstream("{}/POSCAR"_f(path)) << generate_poscar
-              (cell.Cell, cell.AtomPosition + movement_after_scale * cell.Cell.inverse() * direction, cell.AtomType);
+              (cell.Cell, cell.AtomPosition + atom_movement * cell.Cell.inverse() * direction, cell.AtomType);
           }
-          output.ModeRatio[{i_of_qpoint, i_of_mode}] = 1 / phonon_number;
-          log.debug("Write mode {} {} {}"_f
-              (i_of_qpoint, i_of_mode, movement_after_scale.rowwise().norm().eval(), 1 / phonon_number));
+          output.ModeRatio[{i_of_qpoint, i_of_mode}] = ratio;
+          log.debug("Write mode {} {} {}"_f(i_of_qpoint, i_of_mode, atom_movement.rowwise().norm().eval()));
         }
     };
     if (config.Cell == RamanData::Primative) process(input.Primative);
@@ -187,7 +179,8 @@ namespace ufo
         auto&& [i_of_qpoint, i_of_mode] = i;
         auto&& _ = cell.Qpoint[i_of_qpoint].Mode[i_of_mode];
         auto&& susceptibility = config.Susceptibility[i_of_qpoint][i_of_mode];
-        Eigen::Matrix3d raman_tensor = (susceptibility["+"] - susceptibility["-"]) / 2 * ratio;
+        Eigen::Matrix3d raman_tensor = (susceptibility["+"] - susceptibility["-"]) / 2
+          / ratio / raman_input.MaxDisplacement;
         _.RamanTensor = raman_tensor | biu::fromEigen;
         _.WeightOnRaman = config.Polarization[0].transpose() * raman_tensor * config.Polarization[1];
         log.info("{}:{:.2f}:{}:{:.2f} {}"_f
