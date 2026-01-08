@@ -3,7 +3,7 @@ SuperCellDeformation:
   - [ 1, 0, 0 ]
   - [ 0.5, 1, 0 ]
   - [ 0, 0, 1 ]
-AtomTranslation: [ 0, 0, 5.0548836 ]
+AtomTranslation: [ 0, 0, 0.5 ]
 PrimativeCellBasisNumber: [ 8, 8, 8 ]
 PrimativePhonopy: primitive-phonopy.yaml
 PrimativeQpoint: primitive-band.hdf5

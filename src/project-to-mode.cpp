@@ -40,15 +40,16 @@ void ufo::project_to_mode(std::string config_file)
     biu::Logger::Guard log;
     std::vector<Eigen::VectorXcd> basis(config.PrimativeCellBasisNumber.array().prod());
     for (auto [xyz_of_basis, i_of_basis]
-      : biu::sequence(config.PrimativeCellBasisNumber.cast<int>().eval()))
+      : biu::sequence(config.PrimativeCellBasisNumber))
     {
       // 波矢就是 xyz_of_basis, 单位为单胞的倒格矢
       // 将它的单位转换成埃^-1
-      auto wavevector = input.Primative.Cell.inverse() * xyz_of_basis.cast<double>();
+      auto wavevector =
+        (xyz_of_basis.transpose().cast<double>() * input.Primative.Cell.inverse().transpose()).transpose().eval();
       log.debug("xyz_of_basis: {}"_f(xyz_of_basis));
       log.debug("wavevector: {:.3f}"_f(fmt::join(wavevector, ", ")));
       // 将原子坐标单位也转换为埃
-      auto atom_position = input.Primative.AtomPosition * input.Primative.Cell;
+      auto atom_position = (input.Primative.AtomPosition * input.Primative.Cell).eval();
       // 计算基矢
       basis[i_of_basis] = (2i * std::numbers::pi_v<double> * (atom_position * wavevector)).array().exp();
     }
@@ -82,12 +83,11 @@ void ufo::project_to_mode(std::string config_file)
       auto wavevector = input.Primative.Cell.inverse() * wavevector_by_reciprocal_primative_cell;
       log.debug("wavevector: {}"_f(wavevector));
       // 将原子坐标单位也转换为埃
-      Eigen::MatrixX3d atom_position = input.Super.AtomPosition
+      auto atom_translation =
+        (input.Super.AtomTranslation.value_or(std::array{0., 0., 0.}) | biu::toEigen<>)
+        .transpose().replicate(input.Super.AtomPosition.rows(), 1).eval();
+      Eigen::MatrixX3d atom_position = (input.Super.AtomPosition - atom_translation)
         * (input.Super.CellDeformation * input.Super.CellMultiplier.cast<double>().asDiagonal() * input.Primative.Cell);
-      // 如果在制作模型的过程中，原子有移动过，需要减掉这个移动
-      if (input.Super.AtomTranslation)
-        atom_position -= (input.Super.AtomTranslation.value_or(std::array{0., 0., 0.}) | biu::toEigen<>)
-          .transpose().replicate(atom_position.rows(), 1);
       // 计算基矢
       basis[i_of_basis] = (2i * std::numbers::pi_v<double> * (atom_position * wavevector)).array().exp();
     }
