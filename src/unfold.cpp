@@ -31,7 +31,7 @@ void ufo::unfold(std::string config_file)
     std::optional<std::array<double, 3>> AtomTranslation;
 
     // 在单胞内取几个平面波的基矢
-    Eigen::Vector<std::size_t, 3> PrimativeCellBasisNumber;
+    Eigen::Vector3i PrimativeCellBasisNumber;
 
     // 单胞的 phonopy 输出的 phonopy.yaml，用来读入单胞的晶格、原子坐标、原子类型、原子质量
     std::string PrimativePhonopy;
@@ -95,7 +95,7 @@ void ufo::unfold(std::string config_file)
           for (auto l : std::views::iota(0u, 3u))
             eigenvector(k, l) = eigenvector_vector[i][k * 3 + l][j];
         // 原则上讲，需要对读入的原子运动状态作相位转换, 使得它们与我们的约定一致(对超胞周期性重复)，但这个转换 phonopy 已经做了
-        // 这里还要需要做归一化处理 (指将数据简单地作为向量处理的归一化)
+        // 这里还要需要做归一化处理 (指将数据简单地作为向量处理的归一化)，但似乎 phonopy 也已经做了，但我们也再做一次，也没什么坏处
         data.Qpoint[i].Mode[j].EigenVector = eigenvector / eigenvector.norm();
       }
     }
@@ -130,7 +130,7 @@ void ufo::unfold(std::string config_file)
   auto construct_basis = []
   (
     Eigen::Matrix3d primative_cell, Eigen::Vector3i super_cell_multiplier,
-    Eigen::Vector<std::size_t, 3> primative_cell_basis_number, Eigen::MatrixX3d atom_position
+    Eigen::Vector3i primative_cell_basis_number, Eigen::MatrixX3d atom_position
   )
   {
     biu::Logger::Guard log;
@@ -139,16 +139,17 @@ void ufo::unfold(std::string config_file)
     for (auto [diff_of_sub_qpoint_by_reciprocal_modified_super_cell, i_of_sub_qpoint]
       : biu::sequence(super_cell_multiplier))
     {
-      basis[i_of_sub_qpoint].resize(primative_cell_basis_number.prod());
-      for (auto [xyz_of_basis, i_of_basis]
-        : biu::sequence(primative_cell_basis_number))
+      basis[i_of_sub_qpoint].resize((primative_cell_basis_number.array() * 2 - 1).prod());
+      for (auto [xyz_of_basis, i_of_basis] : biu::sequence
+        ((-primative_cell_basis_number + Eigen::Vector3i::Ones()).eval(), primative_cell_basis_number))
       {
         // 计算波矢, 单位为单胞的倒格矢
         auto wavevector_by_reciprocal_primative_cell = xyz_of_basis.cast<double>()
           + super_cell_multiplier.cast<double>().cwiseInverse().asDiagonal()
           * diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>();
         // 将单位转换为埃^-1
-        auto wavevector = primative_cell.inverse() * wavevector_by_reciprocal_primative_cell;
+        auto wavevector =
+          (wavevector_by_reciprocal_primative_cell.transpose() * primative_cell.inverse().transpose()).transpose();
         // 计算基矢
         basis[i_of_sub_qpoint][i_of_basis]
           = (2i * std::numbers::pi_v<double> * (atom_position * wavevector)).array().exp();
@@ -257,7 +258,7 @@ void ufo::unfold(std::string config_file)
   log.info("Done.");
 
   std::clog << "Calculating projection coefficient... " << std::flush;
-  // 将所有模式放到一维来处理
+  // 将所有q点的模式flatten一下，放到一个一维数组中，方便并行计算
   {
     auto modes = output.Super.Qpoint
       | ranges::views::transform([](const auto& qpoint)

@@ -3,11 +3,12 @@
 void ufo::project_to_mode(std::string config_file)
 {
   // 将选定的超胞中的某一个 q 点上的每一个模式到反折叠后的某个 q 点的投影，投射到单胞中的对应 q 点的模式上
-
+  // 与 unfold 的方法类似，只有一个重要的区别：
+  // 组成基矢的平面波的波矢的两个部分中，第二个部分不再需要。因为这个部分的结果已经算出来了，只需要将结果乘上 WeightOnUnfold 即可。
   struct Config
   {
     // 在单胞内取几个平面波的基矢
-    Eigen::Vector<std::size_t, 3> PrimativeCellBasisNumber;
+    Eigen::Vector3i PrimativeCellBasisNumber;
     // 要选定的超胞中的 q 点，sub qpoint，以及单胞中的 q 点
     std::size_t SuperQpointIndex, SubQpointIndex, PrimativeQpointIndex;
     // 输入输出文件的路径，直接输出 yaml，因为这些数据不再需要后处理
@@ -38,18 +39,16 @@ void ufo::project_to_mode(std::string config_file)
   auto primative_basis = [&]
   {
     biu::Logger::Guard log;
-    std::vector<Eigen::VectorXcd> basis(config.PrimativeCellBasisNumber.array().prod());
-    for (auto [xyz_of_basis, i_of_basis]
-      : biu::sequence(config.PrimativeCellBasisNumber))
+    std::vector<Eigen::VectorXcd> basis((config.PrimativeCellBasisNumber.array() * 2 - 1).prod());
+    for (auto [xyz_of_basis, i_of_basis] : biu::sequence
+      ((-config.PrimativeCellBasisNumber + Eigen::Vector3i::Ones()).eval(), config.PrimativeCellBasisNumber))
     {
       // 波矢就是 xyz_of_basis, 单位为单胞的倒格矢
       // 将它的单位转换成埃^-1
       auto wavevector =
-        (xyz_of_basis.transpose().cast<double>() * input.Primative.Cell.inverse().transpose()).transpose().eval();
-      log.debug("xyz_of_basis: {}"_f(xyz_of_basis));
-      log.debug("wavevector: {:.3f}"_f(fmt::join(wavevector, ", ")));
+        (xyz_of_basis.transpose().cast<double>() * input.Primative.Cell.inverse().transpose()).transpose();
       // 将原子坐标单位也转换为埃
-      auto atom_position = (input.Primative.AtomPosition * input.Primative.Cell).eval();
+      auto atom_position = input.Primative.AtomPosition * input.Primative.Cell;
       // 计算基矢
       basis[i_of_basis] = (2i * std::numbers::pi_v<double> * (atom_position * wavevector)).array().exp();
     }
@@ -59,7 +58,7 @@ void ufo::project_to_mode(std::string config_file)
   auto super_basis = [&]
   {
     biu::Logger::Guard log;
-    std::vector<Eigen::VectorXcd> basis(config.PrimativeCellBasisNumber.array().prod());
+    std::vector<Eigen::VectorXcd> basis((config.PrimativeCellBasisNumber.array() * 2 - 1).prod());
     auto diff_of_sub_qpoint_by_reciprocal_modified_super_cell = [&]
     {
       for
@@ -70,23 +69,21 @@ void ufo::project_to_mode(std::string config_file)
         if (i_of_sub_qpoint == config.SubQpointIndex) return diff_of_sub_qpoint_by_reciprocal_modified_super_cell;
       std::unreachable();
     }();
-    log.debug("diff_of_sub_qpoint_by_reciprocal_modified_super_cell: {}"_f
-      (diff_of_sub_qpoint_by_reciprocal_modified_super_cell));
-    for (auto [xyz_of_basis, i_of_basis]
-      : biu::sequence(config.PrimativeCellBasisNumber.cast<int>().eval()))
+    for (auto [xyz_of_basis, i_of_basis] : biu::sequence
+      ((-config.PrimativeCellBasisNumber + Eigen::Vector3i::Ones()).eval(), config.PrimativeCellBasisNumber))
     {
       // 计算波矢, 单位为单胞的倒格矢
       auto wavevector_by_reciprocal_primative_cell = xyz_of_basis.cast<double>()
         + input.Super.CellMultiplier.cast<double>().cwiseInverse().asDiagonal()
         * diff_of_sub_qpoint_by_reciprocal_modified_super_cell.cast<double>();
       // 将单位转换为埃^-1
-      auto wavevector = input.Primative.Cell.inverse() * wavevector_by_reciprocal_primative_cell;
-      log.debug("wavevector: {}"_f(wavevector));
+      auto wavevector =
+        (wavevector_by_reciprocal_primative_cell.transpose() * input.Primative.Cell.inverse().transpose()).transpose();
       // 将原子坐标单位也转换为埃
       auto atom_translation =
         (input.Super.AtomTranslation.value_or(std::array{0., 0., 0.}) | biu::toEigen<>)
         .transpose().replicate(input.Super.AtomPosition.rows(), 1).eval();
-      Eigen::MatrixX3d atom_position = (input.Super.AtomPosition - atom_translation)
+      auto atom_position = (input.Super.AtomPosition - atom_translation)
         * (input.Super.CellDeformation * input.Super.CellMultiplier.cast<double>().asDiagonal() * input.Primative.Cell);
       // 计算基矢
       basis[i_of_basis] = (2i * std::numbers::pi_v<double> * (atom_position * wavevector)).array().exp();
