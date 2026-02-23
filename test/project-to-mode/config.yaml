@@ -1,4 +1,5 @@
-PrimativeCellBasisNumber: [ 8, 8, 8 ]
+AtomPositionTolerance: 0.1
+QpointTolerance: 0.01
 SuperQpointIndex: 0
 SubQpointIndex: 0
 PrimativeQpointIndex: 0
