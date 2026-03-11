@@ -101,4 +101,6 @@ namespace ufo
   void raman_create_displacement(std::string config_file);
   void raman_extract(std::string path);
   void raman_apply_contribution(std::string config_file);
+  void raman_bec_rotate(std::string config_file);
+  void raman_bec_apply_contribution(std::string config_file);
 }

@@ -16,7 +16,7 @@ find_package(Threads REQUIRED)
 message("biu dir: ${biu_DIR}")
 
 add_executable(ufo src/fold.cpp src/unfold.cpp src/project-to-mode.cpp
-  src/plot.cpp src/raman.cpp src/project-to-atom.cpp src/main.cpp)
+  src/plot.cpp src/raman.cpp src/project-to-atom.cpp src/main.cpp src/raman-bec.cpp)
 target_include_directories(ufo PRIVATE ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(ufo PRIVATE TBB::tbb Matplot++::matplot biu::biu)
 target_compile_features(ufo PRIVATE cxx_std_23)
@@ -49,3 +49,7 @@ add_test(NAME raman-extract WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/raman-e
   COMMAND ufo raman-extract .)
 add_test(NAME raman-apply-contribution WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/raman-apply-contribution
   COMMAND ufo raman-apply-contribution config.yaml)
+add_test(NAME raman-bec-rotate WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/raman-bec-rotate
+  COMMAND ufo raman-bec-rotate config.yaml)
+add_test(NAME raman-bec-apply-contribution WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/raman-bec-apply-contribution
+  COMMAND ufo raman-bec-apply-contribution config.yaml)

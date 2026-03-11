@@ -1,0 +1,10 @@
+InputDataFile: data.zpp
+OutputDataFile: raman.zpp
+SelectedQpoints: [0]
+Polarization: [[1, 0, 0], [1, 0, 0]]
+VaspOutputFiles:
+  - [1.h5, m1.h5]
+  - [x.h5, mx.h5]
+  - [y.h5, my.h5]
+  - [z.h5, mz.h5]
+ElectricFieldStrength: 0.001

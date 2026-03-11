@@ -14,5 +14,7 @@ int main(int argc, const char** argv)
   else if (argv[1] == "raman-apply-contribution"s) ufo::raman_apply_contribution(argv[2]);
   else if (argv[1] == "plot-band"s) ufo::plot_band(argv[2]);
   else if (argv[1] == "plot-point"s) ufo::plot_point(argv[2]);
+  else if (argv[1] == "raman-bec-rotate"s) ufo::raman_bec_rotate(argv[2]);
+  else if (argv[1] == "raman-bec-apply-contribution"s) ufo::raman_bec_apply_contribution(argv[2]);
   else throw std::runtime_error("Unknown task: {}"_f(argv[1]));
 }
