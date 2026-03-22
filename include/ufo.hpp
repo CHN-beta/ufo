@@ -103,4 +103,5 @@ namespace ufo
   void raman_apply_contribution(std::string config_file);
   void raman_bec_rotate(std::string config_file);
   void raman_bec_apply_contribution(std::string config_file);
+  void raman_bec_extract(std::string config_file);
 }

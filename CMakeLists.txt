@@ -53,3 +53,5 @@ add_test(NAME raman-bec-rotate WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/rama
   COMMAND ufo raman-bec-rotate config.yaml)
 add_test(NAME raman-bec-apply-contribution WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/raman-bec-apply-contribution
   COMMAND ufo raman-bec-apply-contribution config.yaml)
+add_test(NAME raman-bec-extract WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/raman-bec-extract
+  COMMAND ufo raman-bec-extract config.yaml)

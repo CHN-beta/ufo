@@ -1,0 +1,3 @@
+VaspOutputFile: 1.h5
+SelectedAtoms: [ 0, 1, 2, 3 ]
+Charge: 1
