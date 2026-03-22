@@ -66,6 +66,7 @@ namespace ufo
       // 4种旋转（原始、绕x、绕y、绕z）和2种电场方向（正、负）
       std::array<std::array<std::string, 2>, 4> VaspOutputFiles;
       double ElectricFieldStrength;
+      std::optional<double> Charge;
     };
 
     biu::Logger::Guard log(config_file);
@@ -88,12 +89,15 @@ namespace ufo
         if (bec_data[i][j].size() != input.Super.AtomPosition.rows())
           throw std::runtime_error("Mismatch in BEC data size: {} vs {}"_f
             (bec_data[i][j].size(), input.Super.AtomPosition.rows()));
-        // 将一个模型中所有原子的 BEC 加上一个偏移，使得它们求和为零
-        auto offset = *std::ranges::fold_left_first
+        // 理想情况下，BEC 求和应该是一个对角矩阵，且对角元素全相等，等于原子电荷；但由于数值误差，可能会有一些偏移
+        // 我们将这个偏移平均分配到每个原子上，使得它们求和后得到正确的值；如果没有提供电荷，则默认总和为0
+        auto ideal_charge = (config.Charge.value_or(0) * Eigen::Matrix3d::Identity()).eval();
+        auto actual_charge = *std::ranges::fold_left_first
         (
           bec_data[i][j],
           [](auto&& a, auto&& b) { return (a + b).eval(); }
-        ) / bec_data[i][j].size();
+        );
+        auto offset = (actual_charge - ideal_charge) / bec_data[i][j].size();
         for (std::size_t k = 0; k < bec_data[i][j].size(); k++) bec_data[i][j][k] -= offset;
       }
 
