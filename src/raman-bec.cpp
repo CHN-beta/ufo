@@ -48,10 +48,10 @@ namespace ufo
     for (auto&& [name, rotation] : rotation_matrix)
     {
       auto rotated_cell = (rotation * config.Cell.transpose()).transpose().eval();
-      log.info("rotation: {}"_f(name));
+      std::cout << "rotation: {}"_f(name) << std::endl;
       for (std::size_t i = 0; i < 3; i++)
-        log.info("{:0.16f} {:0.16f} {:0.16f}"_f
-          (rotated_cell(i, 0), rotated_cell(i, 1), rotated_cell(i, 2)));
+        std::cout << "{:0.16f} {:0.16f} {:0.16f}"_f
+          (rotated_cell(i, 0), rotated_cell(i, 1), rotated_cell(i, 2)) << std::endl;
     }
   }
 
