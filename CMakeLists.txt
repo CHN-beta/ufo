@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(ufo VERSION 0.1.0 LANGUAGES CXX)
+project(ufo VERSION 0.2.0 LANGUAGES CXX)
 enable_testing()
 include(GNUInstallDirs)
 
@@ -16,7 +16,8 @@ find_package(Threads REQUIRED)
 message("biu dir: ${biu_DIR}")
 
 add_executable(ufo src/fold.cpp src/unfold.cpp src/project-to-mode.cpp
-  src/plot.cpp src/raman.cpp src/project-to-atom.cpp src/main.cpp src/raman-bec.cpp src/ipr.cpp)
+  src/plot.cpp src/raman.cpp src/project-to-atom.cpp src/main.cpp src/raman-bec.cpp src/ipr.cpp
+  src/mode-effective-charge.cpp)
 target_include_directories(ufo PRIVATE ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(ufo PRIVATE TBB::tbb Matplot++::matplot biu::biu)
 target_compile_features(ufo PRIVATE cxx_std_23)
@@ -56,3 +57,5 @@ add_test(NAME raman-bec-apply-contribution WORKING_DIRECTORY ${PROJECT_SOURCE_DI
 add_test(NAME raman-bec-extract WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/raman-bec-extract
   COMMAND ufo raman-bec-extract config.yaml)
 add_test(NAME ipr WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/ipr COMMAND ufo ipr config.yaml)
+add_test(NAME mode-effective-charge WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test/mode-effective-charge
+  COMMAND ufo mode-effective-charge config.yaml)

@@ -1,0 +1,3 @@
+InputFile: input.zpp
+OutputFile: output.yaml
+VaspOutputFile: vaspout.h5

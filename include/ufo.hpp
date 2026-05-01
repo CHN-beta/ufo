@@ -106,4 +106,5 @@ namespace ufo
   void raman_bec_apply_contribution(std::string config_file);
   void raman_bec_extract(std::string config_file);
   void ipr(std::string config_file);
+  void mode_effective_charge(std::string config_file);
 }
