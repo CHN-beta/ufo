@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(ufo VERSION 0 LANGUAGES CXX)
+project(ufo VERSION 0.1.0 LANGUAGES CXX)
 enable_testing()
 include(GNUInstallDirs)
 
