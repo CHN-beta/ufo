@@ -1,0 +1,33 @@
+name: Build and Release
+
+# 仅在推送包含特定前缀的 Tag 时触发，例如 v1.0.0
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: self-hosted
+
+    # 必须赋予写权限，否则 GITHUB_TOKEN 无法创建 Release
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Execute Nix Build
+        # 根据你的 flake.nix 调整构建命令
+        run: nix build .#release 
+
+      - name: Create Release and Upload Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          # nix build 默认会在当前目录生成 result 软链接
+          # 请根据你的实际 derivation 输出路径修改这里的文件名
+          files: result/x86_64-linux-musl-static.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
